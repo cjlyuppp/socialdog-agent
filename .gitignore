@@ -2,7 +2,7 @@
 research_local/
 outputs/
 data/
-node_modules/
+node_modules
 sources/
 feishu_sync_state.json
 source_inspection.json
