@@ -28,7 +28,7 @@ cd socialdog-agent
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
-python chat_agent.py --setup
+python -m chat_agent --setup
 ```
 
 API Key保存在本机 `.env`，也可通过环境变量配置；格式见 `.env.example`。真实营业数据、快照、聊天记录和密钥均不随仓库发布。
@@ -37,29 +37,29 @@ API Key保存在本机 `.env`，也可通过环境变量配置；格式见 `.env
 
 ```sh
 python -m socialdog_agent.feishu_source --import-base /实际路径/完整来源.base
-python chat_agent.py --check
-python web_agent.py --no-open
+python -m chat_agent --check
+python -m web_agent --no-open
 ```
 
-打开 `http://127.0.0.1:8765`。没有导入数据时网页可以启动，状态会提示数据源未就绪；此时不能进行真实业务查询。服务器上的浏览器访问方式见 [服务器部署说明](DEPLOYMENT.md)。
+打开 `http://127.0.0.1:8765`。没有导入数据时网页可以启动，状态会提示数据源未就绪；此时不能进行真实业务查询。服务器上的浏览器访问方式见 [服务器部署说明](docs/legacy-deployment.md)。
 
-macOS也可双击 `启动网页研究助理.command`。启动脚本优先使用项目虚拟环境。
+macOS也可双击 `launchers/启动网页研究助理.command`。启动脚本优先使用项目虚拟环境。
 
 ## 历史数据模式与评测
 
 ```sh
 # 1. 生成回测包。加 --as-of 会物理删除该日之后的订单，用于样本外测试
-python historical_backtest.py build --source /实际路径/历史交易表.xlsx --output-dir outputs/history_full
-python historical_backtest.py build --source /实际路径/历史交易表.xlsx --output-dir outputs/history_asof --as-of 2023-03-15
-python historical_backtest.py verify --package outputs/history_full
+python -m historical_backtest build --source /实际路径/历史交易表.xlsx --output-dir outputs/history_full
+python -m historical_backtest build --source /实际路径/历史交易表.xlsx --output-dir outputs/history_asof --as-of 2023-03-15
+python -m historical_backtest verify --package outputs/history_full
 
 # 2. 用历史数据提问（命令行或网页），每组至少 5 个订单才披露
-python chat_agent.py --history-package outputs/history_full --question "历史上哪些商品调过价？"
-python web_agent.py --history-package outputs/history_full --history-min-orders 5 --no-open
+python -m chat_agent --history-package outputs/history_full --question "历史上哪些商品调过价？"
+python -m web_agent --history-package outputs/history_full --history-min-orders 5 --no-open
 
 # 3. 用真实模型跑 golden 用例并自动判分
-python eval_runner.py --package outputs/history_full --output-dir outputs/eval_$(date +%Y%m%d)
-python eval_runner.py --package outputs/history_full --only P01,P02 --repeat 3 --output-dir outputs/eval_price
+python -m eval_runner --package outputs/history_full --output-dir outputs/eval_$(date +%Y%m%d)
+python -m eval_runner --package outputs/history_full --only P01,P02 --repeat 3 --output-dir outputs/eval_price
 ```
 
 `eval_runner.py` 对每个用例自动检查四项：是否用 golden 参数调用了对应工具，工具结果是否与 golden 一致，回答是否写出了关键数字，回答里是否有工具结果中找不到的数字。输出 `results.jsonl`、`summary.json`，以及给人工评审用的 `review_sheet.csv`。人工只需按表中的核查要点，给推理过程、口径说明和局限性说明打分。
@@ -71,6 +71,8 @@ python eval_runner.py --package outputs/history_full --only P01,P02 --repeat 3 -
 ## 模型配置
 
 `.env` 中的 `DEEPSEEK_REASONING_EFFORT` 控制默认思考强度（none/low/high/max），默认 `low`；旧的minimal/medium分别对应low/high。多人工作台可在提问或独立作答时选择 Flash/V4 Pro 及思考强度，实际配置随任务保存。核心提示词只保留 8 条通用原则；与数据集相关的口径说明放在各数据源的工具说明和工具结果中。日数、日均、占比、变化率等派生数字由工具计算。
+
+多人工作台管理员可在“管理后台 → 模型服务”验证并保存 DeepSeek API Key。密钥保存在服务器私有文件中，不回显；新任务立即使用，无需重启。未在后台配置时兼容本机 `.env`，具体优先级与备份位置见 [部署说明](docs/多人工作台部署.md#账号与模型)。
 
 ## 数据与研究口径
 
@@ -86,14 +88,14 @@ python eval_runner.py --package outputs/history_full --only P01,P02 --repeat 3 -
 以下测试使用人工构造的数据，不需要API Key，也不会调用外部模型：
 
 ```sh
-python -m unittest test_chat_agent test_research_assistant test_feishu_agent_source test_feishu_daily_clean test_factor_inspection test_web_agent test_historical_backtest test_history_agent test_api_server test_research_workspace -v
+python -m unittest discover -s tests -v
 ```
 
 ## 多人研究工作台
 
 `frontend/` 包含登录/邀请、待办、研究对话、数据核对、测评、研究想法和管理后台。FastAPI 后端使用 SQLite 保存账号、会话、任务、反馈、想法、派题、题库版本、评分及逐次模型用量。每位成员同时最多一个任务，提问和测评在调用模型前原子预占每日配额。
 
-安装后提供 `socialdog-api`、`socialdog-chat`、`socialdog-web`、`socialdog-history`、`socialdog-eval` 命令；也可继续使用对应的 `.py` 入口。后端建议使用 Python 3.12。
+安装后提供 `socialdog-api`、`socialdog-chat`、`socialdog-web`、`socialdog-history`、`socialdog-eval` 命令；也可使用 `python -m api_server` 等模块入口。后端建议使用 Python 3.12。
 
 ```sh
 python3.12 -m venv .venv-api
@@ -120,19 +122,35 @@ socialdog-api serve --history-package outputs/history_cut --reference-db outputs
 
 首次部署不传 `--question-bank` 时题库为空，之后可在管理后台编辑草稿并发布。题库与 T/N、研究规则、审核权限及额度均有管理模块；可选的提交后数据核对和 A/B 评分默认关闭。正式题库、数据准备、配额和用量口径见 [多人工作台部署说明](docs/多人工作台部署.md)，接口见 [接口约定](docs/接口约定.md) 和 [OpenAPI](docs/openapi.json)。前端独立开发方法见 [frontend/README.md](frontend/README.md)。
 
+## 目录
+
+```text
+src/                 Python 命令模块与 socialdog_agent 包
+frontend/            网页源码、组件和前端测试
+tests/               Python 单元与集成测试
+docs/                接口、部署和数据口径说明
+  archive/           历史交接文档
+launchers/           macOS 双击启动器
+outputs/             私有数据包和评测产物，不进入 Git
+research_local/      私有数据库、会话、密钥和审计记录，不进入 Git
+```
+
+安装后在项目根目录运行 `socialdog-api` 等命令，或使用 `python -m api_server`。开发验证可用 `PYTHONPATH=src python -m unittest discover -s tests -v`；从旧目录结构升级时须重新安装项目。
+
 ## 主要文件
 
 | 路径 | 用途 |
 | --- | --- |
-| `web_agent.py` | 网页启动入口 |
-| `chat_agent.py` | 配置检查、密钥设置和命令行提问 |
-| `socialdog_agent/` | 模型适配、工具调用、网页、会话和来源管理 |
-| `research_assistant.py` | 只读分析快照及订单聚合 |
-| `feishu_daily_clean.py` | 官方飞书导出文件的解码与清洗 |
-| `historical_backtest.py` | 历史数据清洗、`--as-of` 截断、调价事件重建、golden 用例与核验 |
-| `socialdog_agent/history_tools.py` | 历史数据模式的 agent 工具与订单数披露规则 |
-| `socialdog_agent/grounding.py` | 回答数字与工具结果的自动核对 |
-| `eval_runner.py` | 用真实模型跑 golden 用例、自动判分并生成人工评审表 |
+| `src/api_server.py` | 多人研究工作台启动及管理入口 |
+| `src/web_agent.py` | 单人原型启动入口 |
+| `src/chat_agent.py` | 配置检查、密钥设置和命令行提问 |
+| `src/socialdog_agent/` | 模型适配、工具调用、网页、会话和来源管理 |
+| `src/research_assistant.py` | 只读分析快照及订单聚合 |
+| `src/feishu_daily_clean.py` | 官方飞书导出文件的解码与清洗 |
+| `src/historical_backtest.py` | 历史数据清洗、`--as-of` 截断、调价事件重建、golden 用例与核验 |
+| `src/socialdog_agent/history_tools.py` | 历史数据模式的 agent 工具与订单数披露规则 |
+| `src/socialdog_agent/grounding.py` | 回答数字与工具结果的自动核对 |
+| `src/eval_runner.py` | 用真实模型跑 golden 用例、自动判分并生成人工评审表 |
 | `docs/口径对照.md` | 飞书口径与历史口径的字段对照 |
 
 `web_agent.py` 是保留的单工作区本地原型，不提供多人账号隔离，仅供可信研究组通过本机或 SSH 转发使用。多人使用请运行 `socialdog-api serve`；公网部署仍需配置 HTTPS 反向代理及备份。

@@ -25,6 +25,7 @@ from .data import AgentData, ReferenceData, load_questions
 from .catalog import DataCatalog
 from .configuration import publish, register_configuration
 from .jobs import JobRunner
+from .provider import DeepSeekCredentials, register_provider
 from .store import APIError, PASSWORDS, Store, TZ, digest, encoded, now, uid
 from .workflow import Workflow, register_workflow
 
@@ -65,8 +66,17 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             raise ValueError("数据核对库与 agent 数据包来源不一致")
     questions = load_questions(config.question_bank)
     settings = chat_agent.load_settings()
-    ready = llm_factory is not None or bool(settings.get("DEEPSEEK_API_KEY", "").strip())
-    factory = (lambda job_config: llm_factory()) if llm_factory else (lambda job_config: chat_agent.make_llm({**settings, "DEEPSEEK_MODEL": job_config["model"], "DEEPSEEK_REASONING_EFFORT": job_config["reasoning_effort"]}))
+    credentials = DeepSeekCredentials(config.database.parent, settings.get('DEEPSEEK_API_KEY', ''))
+
+    def factory(job_config):
+        if llm_factory:
+            return llm_factory()
+        # Read only when a task starts; one running task keeps one credential snapshot.
+        key = credentials.read().key
+        if not key:
+            raise APIError(503, '模型服务已停用，请联系管理员。')
+        return chat_agent.make_llm({**settings, 'DEEPSEEK_API_KEY': key,
+            'DEEPSEEK_MODEL': job_config['model'], 'DEEPSEEK_REASONING_EFFORT': job_config['reasoning_effort']})
     model = model_name or settings["DEEPSEEK_MODEL"]
     cutoff = source.cutoff if source else "1970-01-01"
     store = Store(config.database, cutoff)
@@ -101,6 +111,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     app = FastAPI(title="SocialDog Workspace", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.runner, app.state.source = store, runner, source
     app.state.reference = reference
+    app.state.credentials = credentials
 
     @app.exception_handler(APIError)
     async def business_error(request, error):
@@ -182,8 +193,8 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     def prepared(selection, version=None):
         if not source:
             raise APIError(503, "历史数据尚未配置，请联系管理员。")
-        if not ready:
-            raise APIError(503, "研究助理尚未配置，请联系管理员。")
+        if llm_factory is None and not credentials.read().key:
+            raise APIError(503, "模型服务尚未配置，请联系管理员在后台填写 DeepSeek API Key。")
         selected = selection.model or model
         if selection.model is not None and selected not in {item["id"] for item in model_options}:
             raise APIError(400, "请选择可用的 DeepSeek 模型。")
@@ -484,6 +495,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
 
     register_workflow(app, workflow, identity, admin, capability)
     register_configuration(app, workflow, identity, admin, capability)
+    register_provider(app, credentials, admin)
 
     @app.get("/{path:path}", include_in_schema=False)
     def frontend(path: str):

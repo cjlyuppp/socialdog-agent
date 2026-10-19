@@ -1,6 +1,6 @@
 // In-browser state for the mock backend, persisted to localStorage so reloads keep sessions.
 import type {
-  AdminUser, Assignment, BankWorkspace, EvalAttempt, EvalQuestion, FeedbackIssue, Job, ModelSelection, ProgressEvent, Rating, ResearchIdea, Session, SiteSettings, Turn,
+  AdminUser, Assignment, BankWorkspace, EvalAttempt, EvalQuestion, FeedbackIssue, Job, ModelSelection, ModelServiceSettings, ProgressEvent, Rating, ResearchIdea, Session, SiteSettings, Turn,
 } from "../api/types";
 import { CUTOFF } from "./data";
 import { runMockAgent } from "./agent";
@@ -44,6 +44,7 @@ export interface State {
   usage: UsageRecord[];
   settings: SiteSettings;
   bank: BankWorkspace | null;
+  modelService: ModelServiceSettings;
 }
 
 const KEY = "socialdog-mock-v2";
@@ -73,6 +74,7 @@ function seed(): State {
   }
   return {
     users, current_user_id: null, csrf: id(), sessions: [], turns: [], jobs: [], attempts: [], ratings: [], feedback: [], ideas: [], assignments: [], usage, bank: null,
+    modelService: { provider: "deepseek", configured: true, updated_at: null },
     settings: {
       site_daily_limit: 200, min_orders_per_group: 5, cutoff_date: CUTOFF,
       input_price_per_million_yuan: 2, output_price_per_million_yuan: 8,

@@ -91,7 +91,7 @@ export function GuidePage() {
           <h3>可以这样问</h3>
           <blockquote className="guide-prompt">{step.prompt}</blockquote>
           <div className="guide-query-actions">
-            <Field label="练习使用的对话"><Select value={sessionId} disabled={sessions.isPending || sessions.isError} onChange={event => setParams(previous => { const updated = new URLSearchParams(previous); if (event.target.value) updated.set("session", event.target.value); else updated.delete("session"); return updated; })}>
+            <Field label="练习使用的对话"><Select value={sessionId} disabled={sessions.isPending || sessions.isError} onValueChange={event => setParams(previous => { const updated = new URLSearchParams(previous); if (event) updated.set("session", event); else updated.delete("session"); return updated; })}>
               {missingSession && <option value={sessionId}>原对话不可用，请重新选择</option>}
               <option value="">新建研究对话</option>
               {sessions.data?.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}

@@ -4,7 +4,7 @@ import type {
   SubmitResponse, UsageReport, UserPatch,
   Assignment, AssignmentProgress, BankVersion, FeedbackInput, FeedbackIssue, IdeaInput, IdeaStatus, ResearchIdea,
   ResearcherSummary, ReviewStatus, VersionedQuestion,
-  ModelCatalog, ModelSelection,
+  ModelCatalog, ModelSelection, ModelServiceSettings,
   BankDraft, BankWorkspace, ResearchPolicy, ReviewMember,
 } from "./types";
 
@@ -70,6 +70,10 @@ export const api = {
 
   status: () => request<DataStatus>("GET", "/api/status"),
   models: () => request<ModelCatalog>("GET", "/api/models"),
+  modelService: () => request<ModelServiceSettings>("GET", "/api/admin/model-settings"),
+  saveModelKey: (api_key: string) => request<ModelServiceSettings>("PUT", "/api/admin/model-settings", { api_key }),
+  checkModelService: () => request<ModelServiceSettings>("POST", "/api/admin/model-settings/check"),
+  disableModelService: () => request<ModelServiceSettings>("DELETE", "/api/admin/model-settings"),
   sessions: () => request<Session[]>("GET", "/api/sessions"),
   createSession: () => request<Session>("POST", "/api/sessions"),
   session: (id: string) => request<SessionDetail>("GET", `/api/sessions/${id}`),

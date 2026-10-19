@@ -41,6 +41,7 @@ __pycache__/
 *.pyc
 # Local model credentials; the example contains no secret.
 .env
+.socialdog-secrets/
 .env.*
 !.env.example
 .venv/

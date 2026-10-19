@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 Role = Literal["admin", "researcher"]
 Permission = Literal["review_feedback", "review_ideas", "view_researchers"]
@@ -202,6 +202,24 @@ class ModelCatalog(BaseModel):
     models: list[ModelOption]
     default_model: str
     default_reasoning_effort: ReasoningEffort
+
+
+class ModelServiceSettings(BaseModel):
+    provider: Literal['deepseek'] = 'deepseek'
+    configured: bool
+    updated_at: str | None
+
+
+class DeepSeekKeyInput(Input):
+    api_key: Annotated[SecretStr, Field(min_length=8, max_length=256)]
+
+    @field_validator('api_key')
+    @classmethod
+    def valid_key(cls, value):
+        text = value.get_secret_value().strip()
+        if not text.isascii() or any(c.isspace() for c in text):
+            raise ValueError('Invalid API key')
+        return value
 
 
 class Session(BaseModel):

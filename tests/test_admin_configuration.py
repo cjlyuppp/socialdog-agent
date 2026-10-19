@@ -267,7 +267,7 @@ class ConfigurationTests(unittest.TestCase):
         legacy_path = self.root / 'v3.sqlite'
         with self.store.connection() as db, sqlite3.connect(legacy_path) as legacy:
             for name in ('001_initial.sql', '002_reference_access.sql', '003_research_workflow.sql'):
-                legacy.executescript((fixtures.Path('socialdog_agent/server/migrations') / name).read_text())
+                legacy.executescript((fixtures.Path('src/socialdog_agent/server/migrations') / name).read_text())
             tables = [r[0] for r in legacy.execute("SELECT name FROM sqlite_master WHERE type='table'")]
             columns = {t: ','.join(r[1] for r in legacy.execute(f'PRAGMA table_info({t})')) for t in tables}
             before = {t: [tuple(r) for r in db.execute(f'SELECT {columns[t]} FROM {t} ORDER BY rowid')] for t in tables}

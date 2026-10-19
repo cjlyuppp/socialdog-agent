@@ -16,7 +16,7 @@ MISSING = {'来源字段未填', '未记录', '缺少标识', '待核实', '待�
 
 def link_metadata():
     """Optional local provenance; business document URLs never belong in source code."""
-    path = Path(__file__).with_name('feishu_sync_state.json')
+    path = Path.cwd() / 'feishu_sync_state.json'
     context = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     return {'来源': context.get('source_url', ''), '目标': context.get('target_url', '')}
 

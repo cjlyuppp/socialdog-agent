@@ -37,13 +37,13 @@ export function ReferenceExplorer({ initial, compact = false, context = {} }: { 
       <form onSubmit={(e) => { e.preventDefault(); setSubmitted(draft); }}
             className={`grid gap-4 ${compact ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3 xl:grid-cols-6"}`}>
         <Field label="样本">
-          <Select value={draft.scope} onChange={(e) => set("scope", e.target.value as ReferenceQuery["scope"])}>
+          <Select value={draft.scope} onValueChange={(e) => set("scope", e as ReferenceQuery["scope"])}>
             <option value="baseline">基准样本</option>
             <option value="all">全部记录</option>
           </Select>
         </Field>
         <Field label="分组">
-          <Select value={draft.by} onChange={(e) => set("by", e.target.value as ReferenceQuery["by"])}>
+          <Select value={draft.by} onValueChange={(e) => set("by", e as ReferenceQuery["by"])}>
             {(meta.data?.groups ?? [{ value: "month", label: "按月" }]).map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
           </Select>
         </Field>
@@ -56,7 +56,7 @@ export function ReferenceExplorer({ initial, compact = false, context = {} }: { 
                  onChange={(e) => set("end_date", e.target.value || null)} />
         </Field>
         <Field label="商品">
-          <Select value={draft.product ?? ""} onChange={(e) => set("product", e.target.value || null)}>
+          <Select value={draft.product ?? ""} onValueChange={(e) => set("product", e || null)}>
             <option value="">全部商品</option>
             {meta.data?.products.map((p) => <option key={p} value={p}>{p}</option>)}
           </Select>

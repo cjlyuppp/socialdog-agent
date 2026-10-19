@@ -8,8 +8,8 @@ Machine checks (per case):
 Everything else (reasoning, 口径, limitations) goes to a review sheet for people.
 
 Usage:
-  python eval_runner.py --package 回测包 --output-dir eval_runs/2026-10-19
-  python eval_runner.py --package 回测包 --only A01,P02 --repeat 3 --output-dir ...
+  python -m eval_runner --package 回测包 --output-dir eval_runs/2026-10-19
+  python -m eval_runner --package 回测包 --only A01,P02 --repeat 3 --output-dir ...
 """
 from __future__ import annotations
 

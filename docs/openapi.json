@@ -1880,6 +1880,94 @@
           }
         }
       }
+    },
+    "/api/admin/model-settings": {
+      "get": {
+        "summary": "Model Settings",
+        "operationId": "model_settings_api_admin_model_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelServiceSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save Key",
+        "operationId": "save_key_api_admin_model_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeepSeekKeyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelServiceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Disable",
+        "operationId": "disable_api_admin_model_settings_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelServiceSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/model-settings/check": {
+      "post": {
+        "summary": "Check Key",
+        "operationId": "check_key_api_admin_model_settings_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelServiceSettings"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2539,6 +2627,24 @@
           "date"
         ],
         "title": "DayUsage"
+      },
+      "DeepSeekKeyInput": {
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 8,
+            "format": "password",
+            "title": "Api Key",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "title": "DeepSeekKeyInput"
       },
       "EvalAttempt": {
         "properties": {
@@ -3400,6 +3506,37 @@
           "reasoning_efforts"
         ],
         "title": "ModelOption"
+      },
+      "ModelServiceSettings": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "const": "deepseek",
+            "title": "Provider",
+            "default": "deepseek"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "updated_at"
+        ],
+        "title": "ModelServiceSettings"
       },
       "NewUser": {
         "properties": {

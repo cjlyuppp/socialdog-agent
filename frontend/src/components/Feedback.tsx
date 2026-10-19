@@ -11,7 +11,7 @@ export const newIssue = (): IssueDraft => ({ stage: "retrieval", description: ""
 
 export function IssueFields({ value, onChange, evidence }: { value: IssueDraft; onChange: (v: IssueDraft) => void; evidence: Evidence[] }) {
   return <div className="space-y-4">
-    <Field label="出问题的环节"><Select value={value.stage} onChange={e => onChange({ ...value, stage: e.target.value as Stage })}>{Object.entries(STAGES).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</Select></Field>
+    <Field label="出问题的环节"><Select value={value.stage} onValueChange={e => onChange({ ...value, stage: e as Stage })}>{Object.entries(STAGES).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</Select></Field>
     <Field label="问题描述"><Textarea required maxLength={4000} rows={3} value={value.description} onChange={e => onChange({ ...value, description: e.target.value })} /></Field>
     <Field label="正确的做法或应有结果（选填）"><Textarea maxLength={4000} rows={2} value={value.correct_approach} onChange={e => onChange({ ...value, correct_approach: e.target.value })} /></Field>
     {!!evidence.length && <fieldset><legend className="mb-2 text-sm font-medium">关联依据（选填）</legend><div className="space-y-2">{evidence.map((item, i) => <label key={item.call_id} className="flex items-start gap-2 text-sm break-all"><input type="checkbox" className="mt-1" checked={value.evidence_refs.includes(item.call_id)} onChange={e => onChange({ ...value, evidence_refs: e.target.checked ? [...value.evidence_refs, item.call_id] : value.evidence_refs.filter(v => v !== item.call_id) })} /><span>依据 {i + 1} · {item.tool}<code className="block text-xs text-muted">{item.arguments}</code></span></label>)}</div></fieldset>}

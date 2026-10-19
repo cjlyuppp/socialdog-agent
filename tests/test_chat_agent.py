@@ -187,7 +187,7 @@ class ResearchAgentTest(unittest.TestCase):
 
 class ResponsesClientTest(unittest.TestCase):
     def test_installed_command_configuration_belongs_to_current_workspace(self):
-        source = Path(__file__).resolve().parent
+        source = Path(__file__).resolve().parents[1] / 'src'
         with tempfile.TemporaryDirectory() as temporary:
             result = subprocess.run([sys.executable, "-c", "import sys,json; sys.path.insert(0,sys.argv[1]); import chat_agent,research_assistant; from socialdog_agent.feishu_source import DEFAULT_SYNC_STATE; print(json.dumps([str(chat_agent.ENV_FILE),str(research_assistant.DEFAULT_STATE),str(DEFAULT_SYNC_STATE)]))", str(source)], cwd=temporary, text=True, capture_output=True, check=True)
             root = Path(temporary).resolve()

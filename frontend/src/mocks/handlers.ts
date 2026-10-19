@@ -47,6 +47,7 @@ function inviteLink(user: UserRecord) {
 }
 
 function checkQuota(user: UserRecord) {
+  if (!db.modelService.configured) return fail(503, "模型服务尚未配置，请联系管理员。");
   if (runningJob(user.id)) return fail(409, "你已有一个分析在进行中，请等它完成后再提问。");
   if (usedToday(user.id) >= user.daily_limit) return fail(429, "今天的提问次数已用完，明天再来或联系管理员。");
   if (db.usage.filter((u) => u.date === today()).length >= db.settings.site_daily_limit) {
@@ -112,6 +113,24 @@ function referenceLines(user: UserRecord, request: Request): typeof LINES | Resp
 }
 
 export const handlers = [
+  http.get("/api/admin/model-settings", ({ request }) => {
+    const user = auth(request, "admin"); return user instanceof Response ? user : HttpResponse.json(db.modelService);
+  }),
+  http.put("/api/admin/model-settings", async ({ request }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    const body = await request.json() as { api_key: string };
+    if (!body.api_key || body.api_key.trim().length < 8 || /\s/.test(body.api_key.trim())) return fail(400, "请检查 API Key。");
+    // Persist status only; browser fixtures never retain submitted credentials.
+    db.modelService = { provider: "deepseek", configured: true, updated_at: now() }; save(); return HttpResponse.json(db.modelService);
+  }),
+  http.post("/api/admin/model-settings/check", ({ request }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    return db.modelService.configured ? HttpResponse.json(db.modelService) : fail(400, "请先保存 API Key。");
+  }),
+  http.delete("/api/admin/model-settings", ({ request }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    db.modelService = { provider: "deepseek", configured: false, updated_at: now() }; save(); return HttpResponse.json(db.modelService);
+  }),
   http.get("/api/research-policy", ({ request }) => {
     const user = auth(request); return user instanceof Response ? user : HttpResponse.json(db.settings);
   }),

@@ -26,9 +26,11 @@ socialdog-history = "historical_backtest:main"
 socialdog-eval = "eval_runner:main"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = ["api_server", "chat_agent", "web_agent", "historical_backtest", "research_assistant", "feishu_daily_clean", "eval_runner"]
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["socialdog_agent*"]
 
 [tool.setuptools.package-data]

@@ -354,7 +354,7 @@ class APITests(unittest.TestCase):
             old_settings.pop('anonymous_ab_evaluation')
             legacy_path = self.root / 'legacy.sqlite'
             with sqlite3.connect(legacy_path) as legacy:
-                legacy.executescript(Path('socialdog_agent/server/migrations/001_initial.sql').read_text())
+                legacy.executescript(Path('src/socialdog_agent/server/migrations/001_initial.sql').read_text())
                 tables = [r[0] for r in legacy.execute("SELECT name FROM sqlite_master WHERE type='table' AND name!='settings'")]
                 columns = {t: ','.join(r[1] for r in legacy.execute(f'PRAGMA table_info({t})')) for t in tables}
                 before = {t: [tuple(r) for r in db.execute(f'SELECT {columns[t]} FROM {t} ORDER BY rowid')] for t in tables}
@@ -480,7 +480,7 @@ class APITests(unittest.TestCase):
             self.assertEqual(client.get("/api/eval/questions").json(), [])
 
     def test_exported_openapi_matches_actual_routes_and_models(self):
-        expected = json.loads((Path(__file__).parent / 'docs' / 'openapi.json').read_text())
+        expected = json.loads((Path(__file__).resolve().parents[1] / 'docs' / 'openapi.json').read_text())
         actual = self.app.openapi()
         self.assertEqual(actual['paths'], expected['paths'])
         self.assertEqual(actual['components']['schemas'], expected['components']['schemas'])

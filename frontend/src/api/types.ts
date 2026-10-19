@@ -80,6 +80,7 @@ export type ReasoningEffort = "none" | "low" | "high" | "max";
 export interface ModelSelection { model: string; reasoning_effort: ReasoningEffort }
 export interface ModelOption { id: string; label: string; reasoning_efforts: ReasoningEffort[] }
 export interface ModelCatalog { models: ModelOption[]; default_model: string; default_reasoning_effort: ReasoningEffort }
+export interface ModelServiceSettings { provider: "deepseek"; configured: boolean; updated_at: string | null }
 
 export type TurnStatus = "running" | "ok" | "error";
 

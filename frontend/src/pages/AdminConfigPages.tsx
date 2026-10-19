@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { BankDraft, EvalQuestion, ReferenceGroup, ResearchPolicy } from "../api/types";
 import { Badge, Button, Empty, Field, Input, Notice, Select, Spinner, Textarea } from "../components/ui";
-import { errorText } from "../lib/format";
+import { dateTime, errorText } from "../lib/format";
 import { CATEGORY_LABELS } from "./EvaluatePage";
 
 export function BankManager() {
@@ -53,12 +53,12 @@ export function BankManager() {
     <div className="grid gap-6 border-y border-line py-6 lg:grid-cols-[220px_minmax(0,1fr)]">
       <div><div className="mb-3 flex items-center justify-between"><h3 className="font-medium">题目 · {draft.questions.length}</h3><Button disabled={busy || draft.questions.length >= 100} onClick={add}>添加题目</Button></div><div className="space-y-1">{draft.questions.map((q, i) => <button key={i} className={`w-full rounded-lg px-3 py-3 text-left text-sm ${selected === i ? "bg-accent-soft text-accent" : "hover:bg-sidebar"}`} onClick={() => setSelected(i)}><span className="mr-2 text-muted">{q.id}</span>{q.title || "未命名题目"}</button>)}</div></div>
       {question ? <div className="min-w-0 space-y-5" key={selected}>
-        <div className="grid gap-4 sm:grid-cols-2"><Field label="题目编号"><Input value={question.id} maxLength={80} onChange={e => changeQuestion({ id: e.target.value })} /></Field><Field label="题目分类"><Select value={question.category} onChange={e => changeQuestion({ category: e.target.value as EvalQuestion["category"] })}>{Object.entries(CATEGORY_LABELS).map(([k, v]) => <option value={k} key={k}>{v}</option>)}</Select></Field></div>
+        <div className="grid gap-4 sm:grid-cols-2"><Field label="题目编号"><Input value={question.id} maxLength={80} onChange={e => changeQuestion({ id: e.target.value })} /></Field><Field label="题目分类"><Select value={question.category} onValueChange={e => changeQuestion({ category: e as EvalQuestion["category"] })}>{Object.entries(CATEGORY_LABELS).map(([k, v]) => <option value={k} key={k}>{v}</option>)}</Select></Field></div>
         <Field label="题目标题"><Input maxLength={120} value={question.title} onChange={e => changeQuestion({ title: e.target.value })} /></Field>
         <Field label="研究问题"><Textarea rows={5} maxLength={4000} value={question.question} onChange={e => changeQuestion({ question: e.target.value })} /></Field>
         <details className="rounded-xl bg-sidebar p-4"><summary className="cursor-pointer font-medium">参考数据与提交后核对范围</summary><div className="mt-5 space-y-5">
           <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={!!question.reference_hint} onChange={e => changeQuestion({ reference_hint: e.target.checked ? { scope: "baseline", by: "day" } : null })} />作答时显示参考数据</label>
-          {question.reference_hint && <div className="grid gap-3 sm:grid-cols-2"><Field label="参考数据分组"><Select value={question.reference_hint.by ?? "day"} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, by: e.target.value as ReferenceGroup } })}>{[["all", "总计"], ["day", "按日"], ["week", "按周"], ["month", "按月"], ["hour", "按小时"], ["weekday", "按星期"], ["category", "按分类"], ["product", "按商品"], ["delivery", "按配送方式"], ["payment", "按收款方式"], ["status", "按订单状态"], ["type", "按交易类型"]].map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Field><Field label="参考样本"><Select value={question.reference_hint.scope ?? "baseline"} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, scope: e.target.value as "baseline" | "all" } })}><option value="baseline">基准样本</option><option value="all">全部记录</option></Select></Field><Field label="参考开始日（选填）"><Input type="date" value={question.reference_hint.start_date ?? ""} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, start_date: e.target.value || null } })} /></Field><Field label="参考结束日（选填）"><Input type="date" value={question.reference_hint.end_date ?? ""} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, end_date: e.target.value || null } })} /></Field><Field label="参考商品（选填）"><Input value={question.reference_hint.product ?? ""} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, product: e.target.value || null } })} /></Field></div>}
+          {question.reference_hint && <div className="grid gap-3 sm:grid-cols-2"><Field label="参考数据分组"><Select value={question.reference_hint.by ?? "day"} onValueChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, by: e as ReferenceGroup } })}>{[["all", "总计"], ["day", "按日"], ["week", "按周"], ["month", "按月"], ["hour", "按小时"], ["weekday", "按星期"], ["category", "按分类"], ["product", "按商品"], ["delivery", "按配送方式"], ["payment", "按收款方式"], ["status", "按订单状态"], ["type", "按交易类型"]].map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Field><Field label="参考样本"><Select value={question.reference_hint.scope ?? "baseline"} onValueChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, scope: e as "baseline" | "all" } })}><option value="baseline">基准样本</option><option value="all">全部记录</option></Select></Field><Field label="参考开始日（选填）"><Input type="date" value={question.reference_hint.start_date ?? ""} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, start_date: e.target.value || null } })} /></Field><Field label="参考结束日（选填）"><Input type="date" value={question.reference_hint.end_date ?? ""} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, end_date: e.target.value || null } })} /></Field><Field label="参考商品（选填）"><Input value={question.reference_hint.product ?? ""} onChange={e => changeQuestion({ reference_hint: { ...question.reference_hint, product: e.target.value || null } })} /></Field></div>}
           <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={!!question.post_cutoff_reference} onChange={e => changeQuestion({ post_cutoff_reference: e.target.checked ? { start_date: "", end_date: "", product: null } : null })} />为本题指定提交后可核对的数据</label>
           {question.post_cutoff_reference && <><p className="text-sm leading-6 text-muted">仅在“研究规则”开启后，对提交了本题的研究员开放此范围。</p><div className="grid gap-3 sm:grid-cols-3"><Field label="核对开始日"><Input type="date" max={data.latest_date} value={question.post_cutoff_reference.start_date} onChange={e => changeQuestion({ post_cutoff_reference: { ...question.post_cutoff_reference!, start_date: e.target.value } })} /></Field><Field label="核对结束日"><Input type="date" max={data.latest_date} value={question.post_cutoff_reference.end_date} onChange={e => changeQuestion({ post_cutoff_reference: { ...question.post_cutoff_reference!, end_date: e.target.value } })} /></Field><Field label="仅此商品（选填）"><Input value={question.post_cutoff_reference.product ?? ""} onChange={e => changeQuestion({ post_cutoff_reference: { ...question.post_cutoff_reference!, product: e.target.value || null } })} /></Field></div></>}
         </div></details>
@@ -88,4 +88,38 @@ export function ResearchPolicyEditor() {
     <section className="space-y-5"><h3 className="font-semibold">研究想法表单</h3>{draft.idea_fields.map((field, index) => <div key={field.key} className="grid items-end gap-3 md:grid-cols-[1fr_1fr_auto]"><Field label={`字段 ${index + 1} 名称`}><Input required maxLength={80} value={field.label} onChange={e => setDraft({ ...draft, idea_fields: draft.idea_fields.map(f => f.key === field.key ? { ...f, label: e.target.value } : f) })} /></Field><Field label="填写提示（选填）"><Input maxLength={200} value={field.hint} onChange={e => setDraft({ ...draft, idea_fields: draft.idea_fields.map(f => f.key === field.key ? { ...f, hint: e.target.value } : f) })} /></Field><label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={field.key === "question"} checked={field.required} onChange={e => setDraft({ ...draft, idea_fields: draft.idea_fields.map(f => f.key === field.key ? { ...f, required: e.target.checked } : f) })} />必填</label></div>)}</section>
     <div className="flex flex-wrap items-center gap-4"><Button type="submit" variant="primary" disabled={save.isPending}>保存研究规则</Button>{save.isSuccess && <span className="text-sm text-ok">已保存</span>}{save.error && <Notice>{errorText(save.error)}</Notice>}</div>
   </form>;
+}
+
+export function ModelServiceEditor() {
+  const client = useQueryClient();
+  const settings = useQuery({ queryKey: ["admin-model-service"], queryFn: api.modelService });
+  const [key, setKey] = useState("");
+  const save = useMutation({ mutationFn: () => api.saveModelKey(key.trim()), onSuccess: data => {
+    setKey(""); client.setQueryData(["admin-model-service"], data);
+  } });
+  const check = useMutation({ mutationFn: api.checkModelService });
+  const disable = useMutation({ mutationFn: api.disableModelService, onSuccess: data => {
+    setKey(""); save.reset(); check.reset(); client.setQueryData(["admin-model-service"], data);
+  } });
+  const busy = save.isPending || check.isPending || disable.isPending;
+  if (settings.isPending) return <Spinner />;
+  if (settings.error) return <Notice>{errorText(settings.error)} <Button variant="ghost" onClick={() => settings.refetch()}>重新加载</Button></Notice>;
+  return <div className="max-w-2xl space-y-7">
+    <div className="flex items-center justify-between gap-4 border-b border-line pb-5"><h2 className="text-xl font-semibold">模型服务</h2><Badge tone={settings.data.configured ? "ok" : "neutral"}>{settings.data.configured ? "已配置" : "未配置"}</Badge></div>
+    <div><h3 className="font-medium">DeepSeek</h3><p className="mt-2 text-sm leading-6 text-muted">研究对话和测评共用此 API Key。模型和思考强度由使用者在提问时选择。</p></div>
+    <form className="space-y-5" onSubmit={event => { event.preventDefault(); check.reset(); disable.reset(); save.mutate(); }}>
+      <Field label={settings.data.configured ? "替换 API Key" : "API Key"} hint="保存前验证连接，成功后立即用于新任务。已保存的密钥不会回显。">
+        <Input type="password" name="deepseek-api-key" autoComplete="off" autoCapitalize="none" spellCheck={false} required minLength={8} maxLength={256} disabled={busy} value={key}
+          onChange={event => { setKey(event.target.value); save.reset(); check.reset(); }} placeholder={settings.data.configured ? "输入新的 DeepSeek API Key" : "输入 DeepSeek API Key"} />
+      </Field>
+      <div className="flex flex-wrap gap-3"><Button type="submit" variant="primary" disabled={busy || key.trim().length < 8}>{save.isPending ? "正在验证并保存…" : "验证并保存"}</Button>
+        <Button disabled={busy || !settings.data.configured || !!key} onClick={() => { save.reset(); disable.reset(); check.mutate(); }}>{check.isPending ? "正在检查…" : "验证当前连接"}</Button></div>
+    </form>
+    {(save.error || check.error || disable.error) && <Notice>{errorText(save.error ?? check.error ?? disable.error)}</Notice>}
+    {save.isSuccess && <Notice tone="ok">已保存，新的任务将使用此 API Key。</Notice>}
+    {check.isSuccess && <Notice tone="ok">DeepSeek 连接验证通过。</Notice>}
+    {disable.isSuccess && <Notice tone="neutral">模型服务已停用。保存新的 API Key 后可以继续提问。</Notice>}
+    {settings.data.updated_at && <p className="text-sm text-muted">最近更新：{dateTime(settings.data.updated_at)}</p>}
+    {settings.data.configured && <div className="border-t border-line pt-5"><Button variant="danger" disabled={busy} onClick={() => { if (confirm("停用模型服务后，将暂停新的研究对话和测评。是否停用？")) disable.mutate(); }}>停用模型服务</Button></div>}
+  </div>;
 }

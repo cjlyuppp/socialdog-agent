@@ -1,5 +1,6 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { cloneElement, isValidElement, useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { Icon } from "./Icon";
+export { Select } from './Select';
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -26,21 +27,20 @@ export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInpu
   return <input className={`${control} h-10 ${className}`} {...props} />;
 }
 
-export function Select({ className = "", ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={`${control} h-10 ${className}`} {...props} />;
-}
-
 export function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`${control} py-2.5 leading-6 resize-y ${className}`} {...props} />;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  const generated = useId();
+  const child = isValidElement<{ id?: string; 'aria-describedby'?: string }>(children) ? children : null;
+  const id = child?.props.id ?? generated;
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
-      {children}
-      {hint && <span className="mt-2 block text-xs leading-5 text-muted">{hint}</span>}
-    </label>
+    <div className="block">
+      <label htmlFor={id} className="mb-2 block text-sm font-medium text-ink">{label}</label>
+      {child ? cloneElement(child, { id, 'aria-describedby': [child.props['aria-describedby'], hint ? `${id}-hint` : null].filter(Boolean).join(' ') || undefined }) : children}
+      {hint && <span id={`${id}-hint`} className="mt-2 block text-xs leading-5 text-muted">{hint}</span>}
+    </div>
   );
 }
 

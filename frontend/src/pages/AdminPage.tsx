@@ -9,11 +9,12 @@ import { can, ME_KEY, useMe } from "../lib/auth";
 import { dateTime, errorText, integer, relative, thisMonth, yuan } from "../lib/format";
 import { RatingCard } from "./RatingsPage";
 import { AssignmentsTab, FeedbackQueue, IdeasQueue } from "./ReviewPages";
-import { BankManager, ResearchPolicyEditor } from "./AdminConfigPages";
+import { BankManager, ModelServiceEditor, ResearchPolicyEditor } from "./AdminConfigPages";
 
 const TABS = [
   { id: "bank", label: "题库管理", group: "工作台配置" },
   { id: "policy", label: "研究规则", group: "工作台配置" },
+  { id: "model", label: "模型服务", group: "工作台配置" },
   { id: "users", label: "成员与权限", group: "工作台配置" },
   { id: "settings", label: "额度与运行", group: "工作台配置" },
   { id: "assignments", label: "派题与进度", group: "研究协作" },
@@ -58,7 +59,7 @@ function UserRow({ user, self, onInvite }: { user: AdminUser; self: boolean; onI
       </td>
       <td className="px-3 py-2.5">
         <Select aria-label={`${user.display_name}的角色`} className="h-8 min-w-24 text-xs" value={user.role} disabled={self || update.isPending}
-                onChange={(e) => update.mutate({ role: e.target.value as Role })}>
+                onValueChange={(e) => update.mutate({ role: e as Role })}>
           <option value="researcher">研究员</option>
           <option value="admin">管理员</option>
         </Select>
@@ -115,7 +116,7 @@ function UsersTab() {
           <Field label="用户名"><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })} placeholder="小写字母或数字" required /></Field>
           <Field label="显示名"><Input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} required /></Field>
           <Field label="角色">
-            <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
+            <Select value={form.role} onValueChange={(e) => setForm({ ...form, role: e as Role })}>
               <option value="researcher">研究员</option><option value="admin">管理员</option>
             </Select>
           </Field>
@@ -286,6 +287,7 @@ export function AdminPage() {
       <div className="min-w-0" key={tab}>
       {tab === "bank" && <BankManager />}
       {tab === "policy" && <ResearchPolicyEditor />}
+      {tab === "model" && <ModelServiceEditor />}
       {tab === "users" && <UsersTab />}
       {tab === "usage" && <UsageTab />}
       {tab === "ratings" && <RatingsTab />}

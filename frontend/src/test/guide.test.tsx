@@ -47,14 +47,15 @@ describe("research guide", () => {
     expect((await api.session(session.id)).turns[0].question).toBe("核对选定商品调价前后的记录件数。");
     fireEvent.click(screen.getByRole("link", { name: "研究范例" }));
     await screen.findByRole("heading", { name: "研究入门" });
-    expect((await screen.findByRole("combobox", { name: "练习使用的对话" }) as HTMLSelectElement).value).toBe(session.id);
+    expect((await screen.findByRole("combobox", { name: "练习使用的对话" })).textContent).toContain("核对选定商品调价前后的记录件数");
   });
 
   it("recovers from an unavailable conversation before prefilling a question", async () => {
     await openGuide("/guide?session=missing-session");
     expect(await screen.findByText("原对话暂不可用，请选择其他对话或新建研究对话。")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "填入研究问题" })).toBeNull();
-    fireEvent.change(screen.getByRole("combobox", { name: "练习使用的对话" }), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "练习使用的对话" }));
+    fireEvent.click(screen.getByRole("option", { name: "新建研究对话" }));
     fireEvent.click(await screen.findByRole("link", { name: "填入研究问题" }));
     expect((await screen.findByRole("textbox", { name: "输入研究问题" }) as HTMLTextAreaElement).value).toContain("我想研究商品调价前后的表现");
   });

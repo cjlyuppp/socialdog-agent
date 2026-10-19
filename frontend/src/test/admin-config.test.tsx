@@ -17,6 +17,20 @@ async function login(name = "carrey") {
 }
 
 describe("administrator configuration", () => {
+  it("saves a DeepSeek key without retaining it in public state or browser storage", async () => {
+    await login();
+    open('/admin?tab=model');
+    const input = await screen.findByLabelText('替换 API Key');
+    expect((input as HTMLInputElement).type).toBe('password');
+    fireEvent.change(input, { target: { value: 'integration-only-browser-credential' } });
+    fireEvent.click(screen.getByRole('button', { name: '验证并保存' }));
+    await screen.findByText('已保存，新的任务将使用此 API Key。');
+    expect((input as HTMLInputElement).value).toBe('');
+    expect(JSON.stringify(db)).not.toContain('integration-only-browser-credential');
+    expect(JSON.stringify(window.localStorage)).not.toContain('integration-only-browser-credential');
+    fireEvent.click(screen.getByRole('button', { name: '验证当前连接' }));
+    await screen.findByText('DeepSeek 连接验证通过。');
+  });
   it("keeps edits private until a saved draft is published", async () => {
     await login();
     open("/admin?tab=bank");

@@ -125,10 +125,10 @@ describe("app", () => {
   it("remembers model and effort choices for the current account and sends them with the question", async () => {
     const me = await signIn("lin");
     const app = renderApp("/chat");
-    fireEvent.click(await screen.findByRole("button", { name: /^模型：/ }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "DeepSeek V4 Pro" }));
-    fireEvent.click(screen.getByRole("button", { name: /^思考强度：/ }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "最高" }));
+    fireEvent.click(await screen.findByRole("combobox", { name: /^模型：/ }));
+    fireEvent.click(screen.getByRole("option", { name: "DeepSeek V4 Pro" }));
+    fireEvent.click(screen.getByRole("combobox", { name: /^思考强度：/ }));
+    fireEvent.click(screen.getByRole("option", { name: "最高" }));
     fireEvent.change(screen.getByRole("textbox", { name: "输入研究问题" }), { target: { value: "按月汇总订单" } });
     fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
     await waitFor(() => expect(db.jobs.length).toBe(1));
@@ -136,25 +136,26 @@ describe("app", () => {
     expect(JSON.parse(window.localStorage.getItem(`socialdog-model-${me.id}`)!)).toMatchObject({ model: "deepseek-v4-pro", reasoning_effort: "max" });
     app.unmount();
     renderApp("/evaluate?q=q-month");
-    expect(await screen.findByRole("button", { name: "模型：DeepSeek V4 Pro" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "思考强度：最高" })).toBeTruthy();
+    expect(await screen.findByRole("combobox", { name: "模型：DeepSeek V4 Pro" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "思考强度：最高" })).toBeTruthy();
   });
 
   it("supports keyboard navigation and dismisses the model menu without changing the choice", async () => {
     await signIn("lin");
     renderApp("/chat");
-    const trigger = await screen.findByRole("button", { name: "模型：DeepSeek Flash" });
+    const trigger = await screen.findByRole("combobox", { name: "模型：DeepSeek Flash" });
+    trigger.focus();
     fireEvent.click(trigger);
-    const selected = screen.getByRole("menuitemradio", { name: "DeepSeek Flash" });
-    expect(document.activeElement).toBe(selected);
-    fireEvent.keyDown(selected, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "DeepSeek V4 Pro" }));
+    const selected = screen.getByRole("option", { name: "DeepSeek Flash" });
+    expect(trigger.getAttribute("aria-activedescendant")).toBe(selected.id);
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(trigger.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: "DeepSeek V4 Pro" }).id);
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
     expect(document.activeElement).toBe(trigger);
     fireEvent.click(trigger);
     fireEvent.pointerDown(screen.getByRole("heading", { name: "今天想研究什么？" }));
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.getByRole("button", { name: "模型：DeepSeek Flash" })).toBeTruthy();
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "模型：DeepSeek Flash" })).toBeTruthy();
   });
 });
