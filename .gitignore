@@ -1,0 +1,11 @@
+# Local credentials and business data
+.env
+.env.*
+!.env.example
+research_local/
+outputs/
+data/
+node_modules/
+*.xlsx
+*.base
+*.sqlite
