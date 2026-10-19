@@ -1,0 +1,16 @@
+**
+!pyproject.toml
+!src/
+!src/**
+!frontend/
+!frontend/dist/
+!frontend/dist/**
+!deploy/
+!deploy/Dockerfile
+!deploy/serve.py
+!tests/
+!tests/**
+!docs/
+!docs/openapi.json
+**/__pycache__
+**/*.pyc

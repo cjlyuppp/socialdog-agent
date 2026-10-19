@@ -130,6 +130,7 @@ frontend/            网页源码、组件和前端测试
 tests/               Python 单元与集成测试
 docs/                接口、部署和数据口径说明
   archive/           历史交接文档
+deploy/              econ.socialdog.cn 容器与现有 HTTPS 网关接入
 launchers/           macOS 双击启动器
 outputs/             私有数据包和评测产物，不进入 Git
 research_local/      私有数据库、会话、密钥和审计记录，不进入 Git
@@ -153,4 +154,4 @@ research_local/      私有数据库、会话、密钥和审计记录，不进�
 | `src/eval_runner.py` | 用真实模型跑 golden 用例、自动判分并生成人工评审表 |
 | `docs/口径对照.md` | 飞书口径与历史口径的字段对照 |
 
-`web_agent.py` 是保留的单工作区本地原型，不提供多人账号隔离，仅供可信研究组通过本机或 SSH 转发使用。多人使用请运行 `socialdog-api serve`；公网部署仍需配置 HTTPS 反向代理及备份。
+`web_agent.py` 是保留的单工作区本地原型，不提供多人账号隔离，仅供可信研究组通过本机或 SSH 转发使用。多人使用请运行 `socialdog-api serve`；公网部署使用 HTTPS 反向代理，当前服务器的容器接入方式见 [deploy/README.md](deploy/README.md)。

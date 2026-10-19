@@ -1,0 +1,44 @@
+name: socialdog-econ
+services:
+  workspace:
+    image: ${SOCIALDOG_IMAGE:?Set SOCIALDOG_IMAGE to the tested release image}
+    container_name: socialdog-econ
+    user: "10001:10001"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 768m
+    stop_grace_period: 160s
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    environment:
+      SOCIALDOG_PUBLIC_ORIGIN: https://econ.socialdog.cn
+    volumes:
+      - /opt/econ-agent/data:/data:ro
+      - /opt/econ-agent/workspace:/workspace
+      - /opt/econ-agent/model.env:/app/.env:ro
+    networks:
+      gateway:
+        aliases: [socialdog-econ]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import Request,urlopen; urlopen(Request('http://127.0.0.1:8000/', headers={'Host':'econ.socialdog.cn'}), timeout=5).close()"
+      interval: 15s
+      timeout: 7s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "2"
+networks:
+  gateway:
+    external: true
+    name: anju_anju-internal
