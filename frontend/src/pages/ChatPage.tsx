@@ -31,7 +31,7 @@ function DataInfo({ status, error }: { status?: DataStatus; error: boolean }) {
           <dt>模型</dt><dd>{status?.model ?? "—"}</dd>
         </dl>
         <p>仅查询截止日期及之前的数据。不足最少订单数的分组不展示。</p>
-        <p>管理员可查看你的对话和提交内容，用于研究协作、研究能力评估与模型改进。</p>
+        <p>管理员及获授权的审核人可查看相应的对话和提交内容，用于研究协作、研究能力评估与模型改进。</p>
         <details className="technical-details"><summary>数据版本</summary><p>{status?.dataset_version ?? "—"}</p></details>
       </div>
     </details>

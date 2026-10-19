@@ -496,7 +496,7 @@ def cases(lines,description,quality,limits):
         add(f'U{n:02d}',q,'unavailable',{'analysis':analysis},limits[analysis],['明确缺口，不编造替代结果','充值数据有7条，不等于具备完整账户流水'])
     return tests
 
-def build(source,folder,as_of=None,sheet_name=None):
+def build(source,folder,as_of=None,sheet_name=None,*,report=True):
     import openpyxl
     source,folder=Path(source).resolve(),Path(folder).resolve()
     if folder.exists(): raise ValueError('输出目录已存在，拒绝覆盖；请使用全新目录')
@@ -568,7 +568,7 @@ def build(source,folder,as_of=None,sheet_name=None):
     for p in folder.iterdir():
         if p.is_file(): manifest['file_sha256'][p.name]=digest(p)
     (folder/'manifest.json').write_text(dumps(manifest),encoding='utf-8')
-    print(dumps({'output':str(folder),'description':description,'cases':len(gold)}))
+    if report: print(dumps({'output':str(folder),'description':description,'cases':len(gold)}))
 
 def make_workbook_payload(folder,raw,lines,orders,issues,gold,description,quality):
     def value(v):

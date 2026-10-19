@@ -95,6 +95,7 @@ describe("app", () => {
     const conversation = await api.createSession();
     renderApp("/mine");
     fireEvent.click(await screen.findByRole("button", { name: "提交研究想法" }));
+    await screen.findByLabelText("研究问题");
     for (const [label, value] of [["研究问题", "商品价格是否影响销量"], ["用到的数据", "历史订单"], ["初步发现", "商品间差异较大"], ["下一步想怎么做", "分商品比较"]]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fireEvent.click(await screen.findByRole("checkbox", { name: "新的研究" }));
     const buttons = screen.getAllByRole("button", { name: "提交研究想法" });

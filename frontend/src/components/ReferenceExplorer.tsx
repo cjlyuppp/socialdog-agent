@@ -21,13 +21,13 @@ function downloadCsv(result: ReferenceResult) {
   URL.revokeObjectURL(link.href);
 }
 
-export function ReferenceExplorer({ initial, compact = false }: { initial?: Partial<ReferenceQuery> | null; compact?: boolean }) {
+export function ReferenceExplorer({ initial, compact = false, context = {} }: { initial?: Partial<ReferenceQuery> | null; compact?: boolean; context?: Partial<Pick<ReferenceQuery, "attempt_id" | "assignment_id" | "bank_version_id">> }) {
   const me = useMe().data!;
-  const access = [me.id, me.role, "access-v2"];
-  const meta = useQuery({ queryKey: ["reference-meta", ...access], queryFn: api.referenceMeta, staleTime: Infinity });
+  const access = [me.id, me.role, "access-v3", context];
+  const meta = useQuery({ queryKey: ["reference-meta", ...access], queryFn: () => api.referenceMeta(context) });
   const [draft, setDraft] = useState<ReferenceQuery>({ ...DEFAULT_QUERY, ...initial });
   const [submitted, setSubmitted] = useState<ReferenceQuery>({ ...DEFAULT_QUERY, ...initial });
-  const result = useQuery({ queryKey: ["reference", ...access, submitted], queryFn: () => api.reference(submitted), staleTime: Infinity });
+  const result = useQuery({ queryKey: ["reference", ...access, submitted], queryFn: () => api.reference({ ...submitted, ...context }) });
   const set = <K extends keyof ReferenceQuery>(key: K, value: ReferenceQuery[K]) => setDraft({ ...draft, [key]: value });
   const cutoff = meta.data?.cutoff_date;
   const hiddenRows = result.data?.rows.filter((r) => r.after_cutoff).length ?? 0;
@@ -66,7 +66,7 @@ export function ReferenceExplorer({ initial, compact = false }: { initial?: Part
         </div>
       </form>
 
-      {result.isPending ? <Spinner /> : result.error ? <Notice>{errorText(result.error)}</Notice> : (
+      {meta.error ? <Notice>{errorText(meta.error)}</Notice> : result.isPending ? <Spinner /> : result.error ? <Notice>{errorText(result.error)}</Notice> : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-sm leading-6 text-muted">
             <span>
@@ -104,7 +104,7 @@ export function ReferenceExplorer({ initial, compact = false }: { initial?: Part
           <details className="query-notes">
             <summary><Icon name="chevron" size={15} />数据说明</summary>
             <ul>
-              {cutoff && <li>{meta.data?.can_view_after_cutoff ? `管理员可核对完整历史；研究助理只能查询 ${cutoff} 及之前的数据。` : `可核对 ${cutoff} 及之前的数据，测评提交后范围保持不变。`}</li>}
+              {cutoff && <li>{meta.data?.can_view_after_cutoff ? (me.role === "admin" ? `管理员可核对完整历史；研究助理只能查询 ${cutoff} 及之前的数据。` : `已开放本题指定的后续核对数据。研究助理的回答仍只使用 ${cutoff} 及之前的数据。`) : `可核对 ${cutoff} 及之前的数据。`}</li>}
               <li>没有记录不代表零营业额或停业。</li>
               {result.data.notes.map((note) => <li key={note}>{note}</li>)}
             </ul>

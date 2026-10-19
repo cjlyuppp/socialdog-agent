@@ -2,7 +2,7 @@
 from importlib.resources import files
 import sqlite3
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 
 def migrate(db):
@@ -11,7 +11,7 @@ def migrate(db):
         version = db.execute("PRAGMA user_version").fetchone()[0]
         if not 0 <= version <= CURRENT_VERSION:
             raise ValueError("工作区数据库版本不兼容")
-        for target, name in ((1, "001_initial.sql"), (2, "002_reference_access.sql"), (3, "003_research_workflow.sql")):
+        for target, name in ((1, "001_initial.sql"), (2, "002_reference_access.sql"), (3, "003_research_workflow.sql"), (4, "004_admin_configuration.sql")):
             if target <= version:
                 continue
             statement = ""

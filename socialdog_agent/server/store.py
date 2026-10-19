@@ -77,7 +77,7 @@ class Store:
         if db is None:
             with self.connection() as conn:
                 return self.settings(conn)
-        return json.loads(db.execute("SELECT value FROM settings WHERE id=1").fetchone()[0])
+        return SiteSettings.model_validate(json.loads(db.execute("SELECT value FROM settings WHERE id=1").fetchone()[0])).model_dump(mode="json")
 
     def recover(self, cutoff=None):
         with self.connection(write=True) as db:
@@ -85,7 +85,7 @@ class Store:
             db.execute("UPDATE turns SET status='error',error=? WHERE job_id IN (SELECT id FROM jobs WHERE status IN ('queued','running'))", (message,))
             db.execute("UPDATE jobs SET status='error',error=? WHERE status IN ('queued','running')", (message,))
             db.execute("UPDATE model_calls SET status='interrupted',finished_at=? WHERE status='running'", (now(),))
-            if cutoff:
+            if cutoff and not db.execute("SELECT 1 FROM question_bank_active").fetchone():
                 settings = self.settings(db)
                 settings["cutoff_date"] = cutoff
                 db.execute("UPDATE settings SET value=? WHERE id=1", (encoded(settings),))
@@ -110,12 +110,12 @@ class Store:
         job = db.execute("SELECT id FROM jobs WHERE user_id=? AND status IN ('queued','running')", (user["id"],)).fetchone()
         return {**{k: user[k] for k in ("id", "username", "display_name", "role")},
                 "csrf_token": csrf, "quota": self.quota(db, user), "running_job_id": job[0] if job else None,
-                "notice_version": user["notice_version"]}
+                "notice_version": user["notice_version"], "permissions": json.loads(user["permissions"])}
 
     def public_user(self, db, user):
         return {**{k: user[k] for k in ("id", "username", "display_name", "role", "daily_limit", "evaluation_reserve", "last_active_at")},
                 "disabled": bool(user["disabled"]), "invite_pending": bool(user["invite_hash"]),
-                "used_today": self.quota(db, user)["used_today"]}
+                "used_today": self.quota(db, user)["used_today"], "permissions": json.loads(user["permissions"])}
 
     def new_auth(self, db, user_id):
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -156,7 +156,7 @@ class Store:
                 raise ValueError("已有账号，请在管理后台创建成员")
             user_id = uid()
             db.execute("INSERT INTO users(id,username,display_name,role,daily_limit) VALUES (?,?,?,?,?)",
-                       (user_id, values.username, values.display_name, values.role, values.daily_limit))
+                       (user_id, values.username, values.display_name, values.role, self.settings(db)["default_daily_limit"]))
             return self.invite(db, user_id)
 
     def session(self, db, session_id, user_id):
@@ -186,10 +186,19 @@ class Store:
             raise APIError(404, "未找到该测评。")
         bank = db.execute("SELECT questions FROM question_bank_version WHERE id=?", (row["bank_version_id"],)).fetchone()
         question = next((q for q in json.loads(bank[0]) if q["id"] == row["question_id"]), None) if bank else None
+        rated = bool(db.execute("SELECT 1 FROM ratings WHERE attempt_id=?", (attempt_id,)).fetchone())
+        turn = self.turn(db, row["turn_id"])
+        panels = []
+        if row["anonymous_ab"] and turn["result"]:
+            answers = {"own": row["own_answer"], "agent": turn["result"]["answer"]}
+            panels = [{"label": label, "answer": answers[kind], **({"source": kind} if rated else {})}
+                      for label, kind in zip(("A", "B"), json.loads(row["answer_order"]))]
+            if not rated:
+                turn["result"] = None
         return {**{k: row[k] for k in ("id", "question_id", "own_answer", "job_id", "bank_version_id")},
                 "question_snapshot": question,
-                "turn": self.turn(db, row["turn_id"]),
-                "rated": bool(db.execute("SELECT 1 FROM ratings WHERE attempt_id=?", (attempt_id,)).fetchone())}
+                "turn": turn, "anonymous_ab": bool(row["anonymous_ab"]), "answer_panels": panels,
+                "rated": rated}
 
     def submit(self, user_id, question, config, session_id=None, evaluation=None):
         if not question.strip():
@@ -209,6 +218,9 @@ class Store:
             turn_id, job_id, stamp = uid(), uid(), now()
             settings = self.settings(db)
             config = {**config, "min_orders_per_group": settings["min_orders_per_group"]}
+            active = db.execute("SELECT version_id FROM question_bank_active WHERE id=1").fetchone()
+            if not evaluation and active and config.get("bank_version_id") != active[0]:
+                raise APIError(409, "研究数据范围已更新，请刷新后重新提问。")
             if evaluation:
                 bank = db.execute("SELECT * FROM question_bank_version WHERE id=?", (evaluation["bank_version_id"],)).fetchone()
                 if not bank or bank["dataset_version"] != config["dataset_version"]:
@@ -229,7 +241,8 @@ class Store:
                 db.execute("UPDATE sessions SET title=CASE WHEN title='新的对话' THEN ? ELSE title END,updated_at=? WHERE id=?", (question.strip()[:28], stamp, session_id))
             if evaluation:
                 attempt_id = uid()
-                db.execute("INSERT INTO attempts(id,user_id,question_id,question_title,own_answer,turn_id,job_id,bank_version_id) VALUES (?,?,?,?,?,?,?,?)", (attempt_id, user_id, evaluation["id"], evaluation["title"], evaluation["own_answer"], turn_id, job_id, evaluation["bank_version_id"]))
+                order = ["own", "agent"] if secrets.randbelow(2) else ["agent", "own"]
+                db.execute("INSERT INTO attempts(id,user_id,question_id,question_title,own_answer,turn_id,job_id,bank_version_id,anonymous_ab,answer_order) VALUES (?,?,?,?,?,?,?,?,?,?)", (attempt_id, user_id, evaluation["id"], evaluation["title"], evaluation["own_answer"], turn_id, job_id, evaluation["bank_version_id"], int(settings["anonymous_ab_evaluation"]), encoded(order)))
                 # A saved independent answer is a submission, even if the model later fails.
                 db.execute("UPDATE assignment SET attempt_id=? WHERE user_id=? AND question_id=? AND bank_version_id=? AND attempt_id IS NULL", (attempt_id, user_id, evaluation["id"], evaluation["bank_version_id"]))
                 return self.attempt(db, attempt_id, user_id)

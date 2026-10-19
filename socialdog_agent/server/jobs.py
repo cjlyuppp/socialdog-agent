@@ -74,8 +74,8 @@ class JobRunner:
             with self.store.connection() as db:
                 self.store.user(db, job["user_id"])
                 turn = self.store.turn(db, job["turn_id"])
-                previous = db.execute("SELECT question,result FROM turns WHERE session_id=? AND status='ok' AND rowid < (SELECT rowid FROM turns WHERE id=?) ORDER BY rowid DESC LIMIT 6",
-                                      (job["session_id"], job["turn_id"])).fetchall() if job["session_id"] else []
+                previous = db.execute("SELECT t.question,t.result FROM turns t JOIN jobs j ON j.id=t.job_id WHERE t.session_id=? AND t.status='ok' AND t.rowid < (SELECT rowid FROM turns WHERE id=?) AND json_extract(j.config,'$.dataset_version')=? AND json_extract(j.config,'$.min_orders_per_group')=? ORDER BY t.rowid DESC LIMIT 6",
+                                      (job["session_id"], job["turn_id"], config["dataset_version"], config["min_orders_per_group"])).fetchall() if job["session_id"] else []
             history = []
             for row in reversed(previous):
                 result = json.loads(row["result"])

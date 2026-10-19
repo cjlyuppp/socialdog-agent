@@ -22,6 +22,8 @@ import chat_agent
 
 from . import models as m
 from .data import AgentData, ReferenceData, load_questions
+from .catalog import DataCatalog
+from .configuration import publish, register_configuration
 from .jobs import JobRunner
 from .store import APIError, PASSWORDS, Store, TZ, digest, encoded, now, uid
 from .workflow import Workflow, register_workflow
@@ -68,6 +70,12 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     model = model_name or settings["DEEPSEEK_MODEL"]
     cutoff = source.cutoff if source else "1970-01-01"
     store = Store(config.database, cutoff)
+    with store.connection(write=True) as db:
+        if not db.execute("SELECT 1 FROM question_bank_active").fetchone():
+            initial = store.settings(db)
+            initial["cutoff_date"] = cutoff
+            db.execute("UPDATE settings SET value=? WHERE id=1", (encoded(initial),))
+    source = DataCatalog(source, store)
     workflow = Workflow(store, source, questions)
     runner = JobRunner(store, source, Path(config.state_dir), factory)
     dummy_password = PASSWORDS.hash(secrets.token_urlsafe(32))
@@ -129,7 +137,9 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             if request.headers.get("sec-fetch-site") == "cross-site":
                 return JSONResponse({"error": "不接受跨站请求。"}, status_code=403)
             length = request.headers.get("content-length", "0")
-            if not length.isdigit() or int(length) > 65536:
+            # A bank contains many prompts; ordinary single submissions stay bounded.
+            limit = 2_000_000 if request.url.path == "/api/admin/question-bank/draft" else 65536
+            if not length.isdigit() or int(length) > limit:
                 return JSONResponse({"error": "请求内容过大。"}, status_code=413)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -150,6 +160,13 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             raise APIError(403, "此操作仅管理员可用。")
         return auth
 
+    def capability(permission):
+        def allowed(auth=Depends(identity)):
+            if auth[0]["role"] != "admin" and permission not in json.loads(auth[0]["permissions"]):
+                raise APIError(403, "你没有此项审核权限，请联系管理员。")
+            return auth
+        return allowed
+
     def set_cookie(response, token):
         response.set_cookie(COOKIE, token, max_age=7 * 86400, httponly=True, secure=config.secure_cookie, samesite="lax", path="/")
 
@@ -162,7 +179,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     ]
     default_effort = {"minimal": "low", "medium": "high"}.get(settings["DEEPSEEK_REASONING_EFFORT"], settings["DEEPSEEK_REASONING_EFFORT"])
 
-    def prepared(selection):
+    def prepared(selection, version=None):
         if not source:
             raise APIError(503, "历史数据尚未配置，请联系管理员。")
         if not ready:
@@ -170,8 +187,12 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
         selected = selection.model or model
         if selection.model is not None and selected not in {item["id"] for item in model_options}:
             raise APIError(400, "请选择可用的 DeepSeek 模型。")
-        return {"dataset_version": source.description["dataset_version"], "model": selected,
-                "reasoning_effort": selection.reasoning_effort or default_effort}
+        with store.connection() as db:
+            version = version or workflow.active_bank(db)
+            bank = db.execute("SELECT dataset_version FROM question_bank_version WHERE id=?", (version,)).fetchone()
+        data = source.for_version(bank[0])
+        return {"dataset_version": data.description["dataset_version"], "model": selected,
+                "bank_version_id": version, "reasoning_effort": selection.reasoning_effort or default_effort}
 
     @app.get("/api/models", response_model=m.ModelCatalog)
     def models(auth=Depends(identity)):
@@ -267,30 +288,39 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             return store.job(db, job_id, auth[0]["id"])
 
     @app.get("/api/reference/meta", response_model=m.ReferenceMeta)
-    def reference_meta(auth=Depends(identity)):
+    def reference_meta(attempt_id: str | None = None, assignment_id: str | None = None, bank_version_id: str | None = None, auth=Depends(identity)):
         if not reference:
             raise APIError(503, "核对数据尚未配置，请联系管理员。")
-        return reference.metadata(can_view_after_cutoff=auth[0]["role"] == "admin")
+        with store.connection() as db:
+            access = workflow.reference_access(db, auth[0], attempt_id=attempt_id, assignment_id=assignment_id, bank_version_id=bank_version_id)
+        return reference.metadata(**access)
 
     @app.get("/api/reference/query", response_model=m.ReferenceResult)
     def reference_query(query: m.ReferenceQuery = Query(), auth=Depends(identity)):
         if not reference:
             raise APIError(503, "核对数据尚未配置，请联系管理员。")
-        return reference.query(query, can_view_after_cutoff=auth[0]["role"] == "admin")
+        with store.connection() as db:
+            access = workflow.reference_access(db, auth[0], attempt_id=query.attempt_id, assignment_id=query.assignment_id, bank_version_id=query.bank_version_id)
+        return reference.query(query, **access)
 
     @app.get("/api/eval/questions", response_model=list[m.VersionedQuestion], response_model_exclude_unset=True)
     def eval_questions(auth=Depends(identity)):
         with store.connection(write=True) as db:
             version = workflow.active_bank(db)
-            return [{**q, "bank_version_id": version} for q in questions.values()]
+            bank = db.execute("SELECT questions FROM question_bank_version WHERE id=?", (version,)).fetchone()
+            return [{**q, "bank_version_id": version} for q in json.loads(bank[0])]
 
     @app.post("/api/eval/questions/{question_id}/run", response_model=m.EvalAttempt, status_code=202)
     def eval_run(question_id: str, body: m.OwnAnswer, auth=Depends(identity)):
         with store.connection(write=True) as db:
             question = workflow.question(db, question_id, body.bank_version_id)
+            if question["bank_version_id"] != workflow.active_bank(db) and not db.execute(
+                    "SELECT 1 FROM assignment WHERE user_id=? AND question_id=? AND bank_version_id=?",
+                    (auth[0]["id"], question_id, question["bank_version_id"])).fetchone():
+                raise APIError(403, "旧版本题目仅能从已分配的待办提交。")
         if not body.own_answer.strip():
             raise APIError(400, "请先写下自己的答案。")
-        result = store.submit(auth[0]["id"], question["question"], prepared(body), evaluation={**question, "own_answer": body.own_answer.strip(), "assignment_id": body.assignment_id})
+        result = store.submit(auth[0]["id"], question["question"], prepared(body, question["bank_version_id"]), evaluation={**question, "own_answer": body.own_answer.strip(), "assignment_id": body.assignment_id})
         runner.wake.set()
         return result
 
@@ -309,10 +339,22 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
                 raise APIError(409, "请等待回答完成后再评分。")
             if db.execute("SELECT 1 FROM ratings WHERE attempt_id=?", (body.attempt_id,)).fetchone():
                 raise APIError(409, "这次测评已经评分。")
+            anonymous_scores = None
+            if attempt["anonymous_ab"]:
+                if body.scores is not None or not body.anonymous_scores or set(body.anonymous_scores) != {"A", "B"} or body.issues:
+                    raise APIError(400, "请分别评价 A、B 两份答案，提交后可对模型回答反馈问题。")
+                mapping = dict(zip(("A", "B"), json.loads(attempt["answer_order"])))
+                agent_label = next(k for k, v in mapping.items() if v == "agent")
+                scores = body.anonymous_scores[agent_label]
+                anonymous_scores = {k: v.model_dump() for k, v in body.anonymous_scores.items()}
+            else:
+                if body.scores is None or body.anonymous_scores is not None:
+                    raise APIError(400, "请填写研究助理回答的四项评分。")
+                scores = body.scores
             result = {"id": uid(), "attempt_id": body.attempt_id, "question_id": attempt["question_id"],
                       "question_title": attempt["question_title"], "question": store.turn(db, attempt["turn_id"])["question"],
                       "own_answer": attempt["own_answer"], "agent_answer": store.turn(db, attempt["turn_id"])["result"]["answer"],
-                      "scores": body.scores.model_dump(), "note": body.note.strip(), "created_at": now(), "username": auth[0]["username"]}
+                      "scores": scores.model_dump(), "anonymous_scores": anonymous_scores, "note": body.note.strip(), "created_at": now(), "username": auth[0]["username"]}
             db.execute("INSERT INTO ratings VALUES (?,?,?,?,?)", (result["id"], body.attempt_id, auth[0]["id"], encoded(result), result["created_at"]))
             for issue in body.issues:
                 workflow.add_issue(db, auth[0]["id"], "evaluation", attempt["turn_id"], body.attempt_id, issue)
@@ -332,15 +374,18 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     def create_user(body: m.NewUser, auth=Depends(admin)):
         if not body.display_name.strip():
             raise APIError(400, "显示名不能为空。")
-        if body.evaluation_reserve > body.daily_limit:
-            raise APIError(400, "测评预留不能超过每日上限。")
         with store.connection(write=True) as db:
+            settings = store.settings(db)
+            daily_limit = body.daily_limit if body.daily_limit is not None else settings["default_daily_limit"]
+            reserve = body.evaluation_reserve if body.evaluation_reserve is not None else settings["default_evaluation_reserve"]
+            if reserve > daily_limit:
+                raise APIError(400, "测评预留不能超过每日上限。")
             if db.execute("SELECT 1 FROM users WHERE username=?", (body.username,)).fetchone():
                 raise APIError(409, "用户名已存在。")
-            if db.execute("SELECT count(*) FROM users").fetchone()[0] >= 10:
-                raise APIError(409, "最多可创建 10 个账号。")
+            if db.execute("SELECT count(*) FROM users").fetchone()[0] >= settings["max_accounts"]:
+                raise APIError(409, "已达到账号数量上限，请在额度设置中调整。")
             user_id = uid()
-            db.execute("INSERT INTO users(id,username,display_name,role,daily_limit,evaluation_reserve) VALUES (?,?,?,?,?,?)", (user_id, body.username, body.display_name.strip(), body.role, body.daily_limit, body.evaluation_reserve))
+            db.execute("INSERT INTO users(id,username,display_name,role,daily_limit,evaluation_reserve,permissions) VALUES (?,?,?,?,?,?,?)", (user_id, body.username, body.display_name.strip(), body.role, daily_limit, reserve, encoded(list(dict.fromkeys(body.permissions)))))
             token, expires = store.invite(db, user_id)
             return {"user": store.public_user(db, store.user(db, user_id)), **invite_link(token, expires)}
 
@@ -356,7 +401,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             if patch.get("evaluation_reserve", user["evaluation_reserve"]) > patch.get("daily_limit", user["daily_limit"]):
                 raise APIError(400, "测评预留不能超过每日上限。")
             for key, value in patch.items():
-                db.execute(f"UPDATE users SET {key}=? WHERE id=?", (value, user_id))
+                db.execute(f"UPDATE users SET {key}=? WHERE id=?", (encoded(list(dict.fromkeys(value))) if key == "permissions" else value, user_id))
             if patch.get("disabled") or "role" in patch:
                 db.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
             updated = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
@@ -378,12 +423,20 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
 
     @app.put("/api/admin/settings", response_model=m.SiteSettings)
     def save_settings(body: m.SiteSettings, auth=Depends(admin)):
-        if not source or body.cutoff_date.isoformat() != source.cutoff:
-            raise APIError(409, "截止日期须与已加载数据包一致，请先更换数据包并重启服务。")
+        prepared_data = source.prepare(body.cutoff_date.isoformat())
         values = body.model_dump(mode="json")
         with store.connection(write=True) as db:
+            if values["max_accounts"] < db.execute("SELECT count(*) FROM users").fetchone()[0]:
+                raise APIError(400, "账号上限不能低于现有账号数量。")
+            active = db.execute("SELECT * FROM question_bank_version WHERE id=?", (workflow.active_bank(db),)).fetchone()
+            if active["cutoff_T"] != values["cutoff_date"] or active["threshold_N"] != values["min_orders_per_group"]:
+                draft = m.BankDraft(name=active["name"] or "研究题库", cutoff_T=body.cutoff_date, threshold_N=body.min_orders_per_group, questions=json.loads(active["questions"]))
+                # T/N changes still create an immutable version, including API clients.
+                for q in draft.questions:
+                    if q.post_cutoff_reference and q.post_cutoff_reference.start_date <= body.cutoff_date:
+                        raise APIError(400, "请在题库草稿中同时调整提交后核对窗口。")
+                publish(workflow, db, draft, prepared_data, values)
             db.execute("UPDATE settings SET value=? WHERE id=1", (encoded(values),))
-            workflow.active_bank(db)
         runner.wake.set()
         return values
 
@@ -429,7 +482,8 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
                 "by_user": [{"user_id": user["id"], "username": user["username"], "display_name": user["display_name"], **totals([j for j in jobs if j["user_id"] == user["id"]])} for user in members],
                 "by_day": [{"date": day, **totals([j for j in jobs if j["quota_day"] == day])} for day in sorted({j["quota_day"] for j in jobs})]}
 
-    register_workflow(app, workflow, identity, admin)
+    register_workflow(app, workflow, identity, admin, capability)
+    register_configuration(app, workflow, identity, admin, capability)
 
     @app.get("/{path:path}", include_in_schema=False)
     def frontend(path: str):

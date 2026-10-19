@@ -1,6 +1,6 @@
 // In-browser state for the mock backend, persisted to localStorage so reloads keep sessions.
 import type {
-  AdminUser, Assignment, EvalAttempt, EvalQuestion, FeedbackIssue, Job, ModelSelection, ProgressEvent, Rating, ResearchIdea, Session, SiteSettings, Turn,
+  AdminUser, Assignment, BankWorkspace, EvalAttempt, EvalQuestion, FeedbackIssue, Job, ModelSelection, ProgressEvent, Rating, ResearchIdea, Session, SiteSettings, Turn,
 } from "../api/types";
 import { CUTOFF } from "./data";
 import { runMockAgent } from "./agent";
@@ -36,13 +36,14 @@ export interface State {
   sessions: (Session & { user_id: string })[];
   turns: (Turn & { session_id: string })[];
   jobs: JobRecord[];
-  attempts: (Omit<EvalAttempt, "turn" | "rated"> & { user_id: string; turn_id: string })[];
+  attempts: (Omit<EvalAttempt, "turn" | "rated"> & { user_id: string; turn_id: string; answer_order?: string[] })[];
   ratings: (Rating & { user_id: string })[];
   feedback: FeedbackIssue[];
   ideas: ResearchIdea[];
   assignments: Assignment[];
   usage: UsageRecord[];
   settings: SiteSettings;
+  bank: BankWorkspace | null;
 }
 
 const KEY = "socialdog-mock-v2";
@@ -52,7 +53,7 @@ export const today = () => new Date().toISOString().slice(0, 10);
 
 function seed(): State {
   const user = (fields: Partial<UserRecord> & Pick<UserRecord, "username" | "display_name" | "role">): UserRecord => ({
-    id: id(), daily_limit: 30, evaluation_reserve: 0, notice_version: 0, disabled: false, last_active_at: null, invite_pending: false,
+    id: id(), daily_limit: 30, evaluation_reserve: 0, notice_version: 0, permissions: [], disabled: false, last_active_at: null, invite_pending: false,
     password: "demo", invite_token: null, invite_expires_at: null, ...fields,
   });
   const users = [
@@ -71,13 +72,15 @@ function seed(): State {
     });
   }
   return {
-    users, current_user_id: null, csrf: id(), sessions: [], turns: [], jobs: [], attempts: [], ratings: [], feedback: [], ideas: [], assignments: [], usage,
+    users, current_user_id: null, csrf: id(), sessions: [], turns: [], jobs: [], attempts: [], ratings: [], feedback: [], ideas: [], assignments: [], usage, bank: null,
     settings: {
       site_daily_limit: 200, min_orders_per_group: 5, cutoff_date: CUTOFF,
       input_price_per_million_yuan: 2, output_price_per_million_yuan: 8,
       max_concurrent_jobs: 3, per_user_concurrent_jobs: 1,
       allow_post_cutoff_reference_after_submit: false,
       anonymous_ab_evaluation: false,
+      max_accounts: 10, default_daily_limit: 30, default_evaluation_reserve: 0, invitation_criteria: "",
+      idea_fields: [{ key: "question", label: "研究问题" }, { key: "data_used", label: "用到的数据" }, { key: "findings", label: "初步发现" }, { key: "next_steps", label: "下一步想怎么做" }].map(f => ({ ...f, key: f.key as "question", hint: "", required: true })),
     },
   };
 }
@@ -85,7 +88,14 @@ function seed(): State {
 function load(): State {
   try {
     const saved = localStorage.getItem(KEY);
-    if (saved) return JSON.parse(saved) as State;
+    if (saved) {
+      const previous = JSON.parse(saved) as State;
+      const defaults = seed();
+      return { ...defaults, ...previous, settings: { ...defaults.settings, ...previous.settings },
+        users: previous.users.map(u => ({ ...u, permissions: u.permissions ?? [] })),
+        ideas: (previous.ideas ?? []).map(i => ({ ...i, form_snapshot: i.form_snapshot ?? defaults.settings.idea_fields, criteria_snapshot: i.criteria_snapshot ?? "" })),
+        attempts: previous.attempts.map(a => ({ ...a, anonymous_ab: a.anonymous_ab ?? false, answer_panels: a.answer_panels ?? [] })) };
+    }
   } catch {
     // Private mode or blocked storage: fall back to a fresh in-memory state.
   }
@@ -165,7 +175,7 @@ export function settle() {
   for (const job of db.jobs) advance(job);
 }
 
-export const QUESTIONS: EvalQuestion[] = [
+export const QUESTIONS: EvalQuestion[] = ([
   { id: "q-month", category: "time_series", title: "月度订单走势", question: "按月汇总基准样本的订单数和记录收款金额，哪个月最高？",
     reference_hint: { scope: "baseline", by: "month", end_date: CUTOFF } },
   { id: "q-week", category: "time_series", title: "寒假前后的周订单", question: "按周列出 2023 年 1–3 月基准样本的订单数，寒假前后有什么变化？",
@@ -179,4 +189,4 @@ export const QUESTIONS: EvalQuestion[] = [
   { id: "q-profit", category: "unavailable", title: "利润", question: "算出门店 2023 年上半年的净利润。", reference_hint: null },
   { id: "q-oos", category: "out_of_sample", title: "下半年会不会调价（样本外）", question: "根据历史调价规律，判断截断日之后美式会不会调价，依据是什么？",
     reference_hint: { scope: "baseline", by: "month", product: "美式" } },
-];
+] satisfies Omit<EvalQuestion, "post_cutoff_reference">[]).map(q => ({ ...q, post_cutoff_reference: null }));

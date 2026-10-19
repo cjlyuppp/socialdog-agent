@@ -2,19 +2,28 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RATINGS_EXPORT_URL, api } from "../api/client";
-import type { AdminUser, InviteLink, NewUser, Role, SiteSettings } from "../api/types";
+import type { AdminUser, InviteLink, NewUser, Permission, Role, SiteSettings } from "../api/types";
 import { Page } from "../components/Layout";
 import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader, Select, Spinner } from "../components/ui";
-import { ME_KEY, useMe } from "../lib/auth";
+import { can, ME_KEY, useMe } from "../lib/auth";
 import { dateTime, errorText, integer, relative, thisMonth, yuan } from "../lib/format";
 import { RatingCard } from "./RatingsPage";
 import { AssignmentsTab, FeedbackQueue, IdeasQueue } from "./ReviewPages";
+import { BankManager, ResearchPolicyEditor } from "./AdminConfigPages";
 
 const TABS = [
-  { id: "users", label: "用户与配额" }, { id: "usage", label: "用量与费用" },
-  { id: "ratings", label: "测评记录" }, { id: "settings", label: "全站设置" },
-  { id: "assignments", label: "派题与进度" }, { id: "feedback", label: "问题复核" }, { id: "ideas", label: "研究想法" },
+  { id: "bank", label: "题库管理", group: "工作台配置" },
+  { id: "policy", label: "研究规则", group: "工作台配置" },
+  { id: "users", label: "成员与权限", group: "工作台配置" },
+  { id: "settings", label: "额度与运行", group: "工作台配置" },
+  { id: "assignments", label: "派题与进度", group: "研究协作" },
+  { id: "feedback", label: "问题复核", group: "研究协作" },
+  { id: "ideas", label: "研究想法", group: "研究协作" },
+  { id: "researchers", label: "研究员档案", group: "研究协作" },
+  { id: "ratings", label: "测评记录", group: "记录与用量" },
+  { id: "usage", label: "用量与费用", group: "记录与用量" },
 ] as const;
+const PERMISSIONS: [Permission, string][] = [["review_feedback", "复核问题反馈"], ["review_ideas", "审核研究想法"], ["view_researchers", "查看研究员档案与对话"]];
 
 function InviteBox({ link, onClose }: { link: InviteLink; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -53,6 +62,7 @@ function UserRow({ user, self, onInvite }: { user: AdminUser; self: boolean; onI
           <option value="researcher">研究员</option>
           <option value="admin">管理员</option>
         </Select>
+        {user.role !== "admin" && <details className="mt-2 whitespace-normal"><summary className="cursor-pointer text-sm text-muted">审核权限 · {user.permissions.length}</summary><div className="mt-3 space-y-3">{PERMISSIONS.map(([key, label]) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={update.isPending} checked={user.permissions.includes(key)} onChange={e => update.mutate({ permissions: e.target.checked ? [...user.permissions, key] : user.permissions.filter(p => p !== key) })} />{label}</label>)}</div></details>}
       </td>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5">
@@ -84,13 +94,14 @@ function UsersTab() {
   const me = useMe().data!;
   const client = useQueryClient();
   const users = useQuery({ queryKey: ["admin-users"], queryFn: api.users });
-  const [form, setForm] = useState<NewUser>({ username: "", display_name: "", role: "researcher", daily_limit: 30 });
+  const settings = useQuery({ queryKey: ["admin-settings"], queryFn: api.settings });
+  const [form, setForm] = useState<NewUser>({ username: "", display_name: "", role: "researcher" });
   const [invite, setInvite] = useState<InviteLink | null>(null);
   const create = useMutation({
     mutationFn: () => api.createUser(form),
     onSuccess: (result) => {
       setInvite(result);
-      setForm({ username: "", display_name: "", role: "researcher", daily_limit: 30 });
+      setForm({ username: "", display_name: "", role: "researcher" });
       client.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -100,7 +111,7 @@ function UsersTab() {
     <div className="space-y-4">
       {invite && <InviteBox link={invite} onClose={() => setInvite(null)} />}
       <Card className="p-4">
-        <form onSubmit={submit} className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <form onSubmit={submit} className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <Field label="用户名"><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })} placeholder="小写字母或数字" required /></Field>
           <Field label="显示名"><Input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} required /></Field>
           <Field label="角色">
@@ -108,7 +119,8 @@ function UsersTab() {
               <option value="researcher">研究员</option><option value="admin">管理员</option>
             </Select>
           </Field>
-          <Field label="每日提问上限"><Input type="number" min={0} max={500} value={form.daily_limit} onChange={(e) => setForm({ ...form, daily_limit: Number(e.target.value) })} /></Field>
+          <Field label="每日提问上限"><Input type="number" min={0} max={500} placeholder={String(settings.data?.default_daily_limit ?? 30)} value={form.daily_limit ?? ""} onChange={(e) => setForm({ ...form, daily_limit: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
+          <Field label="测评预留"><Input type="number" min={0} max={form.daily_limit ?? settings.data?.default_daily_limit ?? 500} placeholder={String(settings.data?.default_evaluation_reserve ?? 0)} value={form.evaluation_reserve ?? ""} onChange={e => setForm({ ...form, evaluation_reserve: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
           <div className="col-span-2 flex items-end md:col-span-1"><Button type="submit" variant="primary" className="w-full" disabled={create.isPending}>创建并生成邀请</Button></div>
         </form>
         {create.error && <div className="mt-3"><Notice>{errorText(create.error)}</Notice></div>}
@@ -121,7 +133,7 @@ function UsersTab() {
             </thead>
             <tbody>{users.data.map((u) => <UserRow key={u.id} user={u} self={u.id === me.id} onInvite={setInvite} />)}</tbody>
           </table>
-          <p className="px-4 py-3 text-xs text-muted">{users.data.length} / 10 个账号</p>
+          <p className="px-4 py-3 text-sm text-muted">{users.data.length} / {settings.data?.max_accounts ?? "—"} 个账号</p>
         </Card>
       )}
     </div>
@@ -217,8 +229,9 @@ function RatingsTab() {
 }
 
 const SETTING_FIELDS: { key: keyof SiteSettings; label: string; hint: string; type: "number" | "date"; step?: string }[] = [
-  { key: "cutoff_date", label: "可查询数据截止日期", hint: "修改后需重新生成数据包并重启服务。", type: "date" },
-  { key: "min_orders_per_group", label: "每组最少订单数", hint: "不足此数量的分组不展示。", type: "number" },
+  { key: "max_accounts", label: "账号数量上限", hint: "包括管理员、审核人和研究员", type: "number" },
+  { key: "default_daily_limit", label: "新成员每日提问上限", hint: "不改变已有成员额度", type: "number" },
+  { key: "default_evaluation_reserve", label: "新成员测评预留", hint: "包含在每日上限内", type: "number" },
   { key: "site_daily_limit", label: "全站每日提问上限", hint: "", type: "number" },
   { key: "max_concurrent_jobs", label: "全站最多同时运行", hint: "超出的问题排队", type: "number" },
   { key: "per_user_concurrent_jobs", label: "每人最多同时运行", hint: "", type: "number" },
@@ -232,7 +245,7 @@ function SettingsTab() {
   const [draft, setDraft] = useState<SiteSettings | null>(null);
   useEffect(() => { if (settings.data) setDraft(settings.data); }, [settings.data]);
   const save = useMutation({
-    mutationFn: () => api.saveSettings(draft!),
+    mutationFn: () => api.saveRuntime(draft!),
     onSuccess: (saved) => {
       client.setQueryData(["admin-settings"], saved);
       client.invalidateQueries({ queryKey: ["status"] });
@@ -261,19 +274,18 @@ function SettingsTab() {
 }
 
 export function AdminPage() {
+  const me = useMe().data!;
   const [params, setParams] = useSearchParams();
-  const tab = TABS.find((t) => t.id === params.get("tab"))?.id ?? "users";
+  const available = TABS.filter(t => me.role === "admin" || (t.id === "feedback" && can(me, "review_feedback")) || (t.id === "ideas" && can(me, "review_ideas")) || (t.id === "researchers" && can(me, "view_researchers")));
+  const tab = available.find((t) => t.id === params.get("tab"))?.id ?? available[0]?.id;
   return (
     <Page wide>
-      <PageHeader title="管理后台" />
-      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-line" role="tablist">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setParams({ tab: t.id })}
-                  className={`-mb-px border-b-2 px-3 py-2 text-[13px] whitespace-nowrap ${tab === t.id ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink"}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <PageHeader title={me.role === "admin" ? "管理后台" : "审核工作台"} />
+      <div className="grid min-w-0 gap-7 lg:grid-cols-[160px_minmax(0,1fr)]">
+      <nav aria-label="管理模块" className="flex flex-wrap content-start gap-2 lg:block lg:space-y-7">{["工作台配置", "研究协作", "记录与用量"].map(group => available.some(t => t.group === group) && <div key={group}><p className="mb-2 hidden text-sm font-medium text-muted lg:block">{group}</p><div className="flex flex-wrap gap-1 lg:block lg:space-y-1">{available.filter(t => t.group === group).map(t => <button key={t.id} type="button" aria-current={tab === t.id ? "page" : undefined} onClick={() => setParams({ tab: t.id })} className={`rounded-lg px-3 py-2.5 text-left text-sm lg:w-full ${tab === t.id ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-sidebar hover:text-ink"}`}>{t.label}</button>)}</div></div>)}</nav>
+      <div className="min-w-0" key={tab}>
+      {tab === "bank" && <BankManager />}
+      {tab === "policy" && <ResearchPolicyEditor />}
       {tab === "users" && <UsersTab />}
       {tab === "usage" && <UsageTab />}
       {tab === "ratings" && <RatingsTab />}
@@ -281,6 +293,13 @@ export function AdminPage() {
       {tab === "assignments" && <AssignmentsTab />}
       {tab === "feedback" && <FeedbackQueue />}
       {tab === "ideas" && <IdeasQueue />}
+      {tab === "researchers" && <ResearcherDirectory />}
+      </div></div>
     </Page>
   );
+}
+
+function ResearcherDirectory() {
+  const members = useQuery({ queryKey: ["review-members"], queryFn: api.reviewMembers });
+  return members.isPending ? <Spinner /> : members.error ? <Notice>{errorText(members.error)}</Notice> : <div><h2 className="mb-5 text-xl font-semibold">研究员档案</h2><div className="divide-y divide-line">{members.data.map(m => <Link className="flex items-center justify-between py-4 underline underline-offset-4" key={m.id} to={`/admin/researchers/${m.id}`}>{m.display_name}<span className="text-sm text-muted">查看研究与反馈</span></Link>)}</div></div>;
 }

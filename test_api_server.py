@@ -340,7 +340,9 @@ class APITests(unittest.TestCase):
         self.assertEqual(researcher.get('/api/reference/query?by=all&start_date=2023-03-16').json()['rows'], [])
         self.assertFalse(self.client.get('/api/admin/settings').json()['allow_post_cutoff_reference_after_submit'])
         settings = self.client.get('/api/admin/settings').json()
-        self.assertEqual(self.client.put('/api/admin/settings', json={**settings, 'allow_post_cutoff_reference_after_submit': True}).status_code, 400)
+        self.assertEqual(self.client.put('/api/admin/settings', json={**settings, 'allow_post_cutoff_reference_after_submit': True}).status_code, 200)
+        # Enabling the policy alone never unlocks questions without an explicit window.
+        self.assertEqual(researcher.get('/api/reference/query', params={'by': 'all', 'start_date': '2023-03-16', 'attempt_id': attempt['id']}).json()['rows'], [])
 
     def test_v1_migration_preserves_existing_records_and_is_idempotent(self):
         attempt = self.client.post('/api/eval/questions/q-data/run', json={'own_answer': '旧答案'}).json()
@@ -423,9 +425,10 @@ class APITests(unittest.TestCase):
         first = self.ask()
         self.finished(first["job"]["id"])
         cookies = self.client.cookies
+        version = self.client.get('/api/eval/questions').json()[0]['bank_version_id']
         self.client.__exit__(None, None, None)
         self.opened = False
-        stale = self.store.submit(self.me["id"], "未执行问题", {"dataset_version": self.app.state.source.description["dataset_version"]}, session_id=first["job"]["session_id"])
+        stale = self.store.submit(self.me["id"], "未执行问题", {"dataset_version": self.app.state.source.description["dataset_version"], "bank_version_id": version}, session_id=first["job"]["session_id"])
         self.app = create_app(self.config, llm_factory=lambda: RecordingLLM(self))
         self.client = TestClient(self.app, base_url="https://testserver")
         self.client.cookies.update(cookies)
@@ -449,7 +452,9 @@ class APITests(unittest.TestCase):
         body = self.client.get("/api/admin/settings").json()
         for patch in ({"min_orders_per_group": 0}, {"per_user_concurrent_jobs": 2}, {"site_daily_limit": -1}):
             self.assertEqual(self.client.put("/api/admin/settings", json={**body, **patch}).status_code, 400)
+        self.app.state.source.archive = None
         self.assertEqual(self.client.put("/api/admin/settings", json={**body, "cutoff_date": "2023-03-20"}).status_code, 409)
+        self.assertEqual(self.client.get('/api/status').json()['cutoff_date'], '2023-03-15')
 
     def test_disabled_member_loses_access(self):
         other, user_id, _ = self.new_user()

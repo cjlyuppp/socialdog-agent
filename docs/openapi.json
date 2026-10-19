@@ -354,6 +354,56 @@
       "get": {
         "summary": "Reference Meta",
         "operationId": "reference_meta_api_reference_meta_get",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "assignment_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assignment Id"
+            }
+          },
+          {
+            "name": "bank_version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bank Version Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -361,6 +411,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReferenceMeta"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -461,6 +521,54 @@
                 }
               ],
               "title": "Product"
+            }
+          },
+          {
+            "name": "attempt_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "assignment_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assignment Id"
+            }
+          },
+          {
+            "name": "bank_version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bank Version Id"
             }
           }
         ],
@@ -829,6 +937,42 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SiteSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Save Runtime",
+        "operationId": "save_runtime_api_admin_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeSettings"
               }
             }
           },
@@ -1564,6 +1708,178 @@
           }
         }
       }
+    },
+    "/api/admin/question-bank": {
+      "get": {
+        "summary": "Bank Workspace",
+        "operationId": "bank_workspace_api_admin_question_bank_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankWorkspace"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/question-bank/draft": {
+      "put": {
+        "summary": "Save Draft",
+        "operationId": "save_draft_api_admin_question_bank_draft_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/question-bank/publish": {
+      "post": {
+        "summary": "Publish Draft",
+        "operationId": "publish_draft_api_admin_question_bank_publish_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishBank"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-policy": {
+      "get": {
+        "summary": "Research Policy",
+        "operationId": "research_policy_api_research_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchPolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/research-policy": {
+      "patch": {
+        "summary": "Save Policy",
+        "operationId": "save_policy_api_admin_research_policy_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/review/members": {
+      "get": {
+        "summary": "Review Members",
+        "operationId": "review_members_api_review_members_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewMember"
+                  },
+                  "type": "array",
+                  "title": "Response Review Members Api Review Members Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1643,6 +1959,18 @@
           "invite_pending": {
             "type": "boolean",
             "title": "Invite Pending"
+          },
+          "permissions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "review_feedback",
+                "review_ideas",
+                "view_researchers"
+              ]
+            },
+            "type": "array",
+            "title": "Permissions"
           }
         },
         "type": "object",
@@ -1656,7 +1984,8 @@
           "disabled",
           "used_today",
           "last_active_at",
-          "invite_pending"
+          "invite_pending",
+          "permissions"
         ],
         "title": "AdminUser"
       },
@@ -1868,6 +2197,132 @@
         ],
         "title": "AssignmentProgress"
       },
+      "BankDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "cutoff_T": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff T"
+          },
+          "threshold_N": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold N"
+          },
+          "dataset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Version"
+          },
+          "legacy": {
+            "type": "boolean",
+            "title": "Legacy"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/EvalQuestion"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "cutoff_T",
+          "threshold_N",
+          "dataset_version",
+          "legacy",
+          "created_at",
+          "question_count",
+          "name",
+          "questions",
+          "active"
+        ],
+        "title": "BankDetail"
+      },
+      "BankDraft": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision",
+            "default": 0
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "cutoff_T": {
+            "type": "string",
+            "format": "date",
+            "title": "Cutoff T"
+          },
+          "threshold_N": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Threshold N"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/EvalQuestion"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Questions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "cutoff_T",
+          "threshold_N",
+          "questions"
+        ],
+        "title": "BankDraft"
+      },
       "BankVersion": {
         "properties": {
           "id": {
@@ -1931,6 +2386,45 @@
           "question_count"
         ],
         "title": "BankVersion"
+      },
+      "BankWorkspace": {
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/BankDraft"
+          },
+          "active": {
+            "$ref": "#/components/schemas/BankDetail"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/BankDetail"
+            },
+            "type": "array",
+            "title": "Versions"
+          },
+          "can_change_cutoff": {
+            "type": "boolean",
+            "title": "Can Change Cutoff"
+          },
+          "earliest_date": {
+            "type": "string",
+            "title": "Earliest Date"
+          },
+          "latest_date": {
+            "type": "string",
+            "title": "Latest Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft",
+          "active",
+          "versions",
+          "can_change_cutoff",
+          "earliest_date",
+          "latest_date"
+        ],
+        "title": "BankWorkspace"
       },
       "CreatedUser": {
         "properties": {
@@ -2093,6 +2587,20 @@
               }
             ],
             "title": "Question Snapshot"
+          },
+          "anonymous_ab": {
+            "type": "boolean",
+            "title": "Anonymous Ab"
+          },
+          "answer_panels": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Answer Panels"
           }
         },
         "type": "object",
@@ -2104,9 +2612,73 @@
           "turn",
           "rated",
           "bank_version_id",
-          "question_snapshot"
+          "question_snapshot",
+          "anonymous_ab",
+          "answer_panels"
         ],
         "title": "EvalAttempt"
+      },
+      "EvalQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "time_series",
+              "product",
+              "price_event",
+              "quality",
+              "unavailable",
+              "out_of_sample"
+            ],
+            "title": "Category"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "reference_hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_cutoff_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "title",
+          "question"
+        ],
+        "title": "EvalQuestion"
       },
       "Evidence": {
         "properties": {
@@ -2388,6 +2960,44 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "IdeaField": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "question",
+              "data_used",
+              "findings",
+              "next_steps"
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "hint": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Hint",
+            "default": ""
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "IdeaField"
+      },
       "IdeaInput": {
         "properties": {
           "question": {
@@ -2399,20 +3009,20 @@
           "data_used": {
             "type": "string",
             "maxLength": 4000,
-            "minLength": 1,
-            "title": "Data Used"
+            "title": "Data Used",
+            "default": ""
           },
           "findings": {
             "type": "string",
             "maxLength": 4000,
-            "minLength": 1,
-            "title": "Findings"
+            "title": "Findings",
+            "default": ""
           },
           "next_steps": {
             "type": "string",
             "maxLength": 4000,
-            "minLength": 1,
-            "title": "Next Steps"
+            "title": "Next Steps",
+            "default": ""
           },
           "linked_conversations": {
             "items": {
@@ -2426,10 +3036,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "question",
-          "data_used",
-          "findings",
-          "next_steps"
+          "question"
         ],
         "title": "IdeaInput"
       },
@@ -2702,6 +3309,18 @@
           "notice_version": {
             "type": "integer",
             "title": "Notice Version"
+          },
+          "permissions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "review_feedback",
+                "review_ideas",
+                "view_researchers"
+              ]
+            },
+            "type": "array",
+            "title": "Permissions"
           }
         },
         "type": "object",
@@ -2713,7 +3332,8 @@
           "csrf_token",
           "quota",
           "running_job_id",
-          "notice_version"
+          "notice_version",
+          "permissions"
         ],
         "title": "Me"
       },
@@ -2804,18 +3424,43 @@
             "default": "researcher"
           },
           "daily_limit": {
-            "type": "integer",
-            "maximum": 500.0,
-            "minimum": 0.0,
-            "title": "Daily Limit",
-            "default": 30
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 500.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Limit"
           },
           "evaluation_reserve": {
-            "type": "integer",
-            "maximum": 500.0,
-            "minimum": 0.0,
-            "title": "Evaluation Reserve",
-            "default": 0
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 500.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Reserve"
+          },
+          "permissions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "review_feedback",
+                "review_ideas",
+                "view_researchers"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Permissions"
           }
         },
         "additionalProperties": false,
@@ -2935,6 +3580,21 @@
           "at"
         ],
         "title": "ProgressEvent"
+      },
+      "PublishBank": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "title": "PublishBank"
       },
       "QuestionInput": {
         "properties": {
@@ -3063,6 +3723,20 @@
           "username": {
             "type": "string",
             "title": "Username"
+          },
+          "anonymous_scores": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/RatingScores"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anonymous Scores"
           }
         },
         "type": "object",
@@ -3088,7 +3762,34 @@
             "title": "Attempt Id"
           },
           "scores": {
-            "$ref": "#/components/schemas/RatingScores"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RatingScores"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "anonymous_scores": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/RatingScores"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "A",
+                    "B"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anonymous Scores"
           },
           "note": {
             "type": "string",
@@ -3108,8 +3809,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "attempt_id",
-          "scores"
+          "attempt_id"
         ],
         "title": "RatingInput"
       },
@@ -3356,6 +4056,39 @@
               }
             ],
             "title": "Product"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
+          "bank_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Version Id"
           }
         },
         "additionalProperties": false,
@@ -3448,6 +4181,40 @@
         ],
         "title": "ReferenceRow"
       },
+      "ReferenceWindow": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start_date",
+          "end_date"
+        ],
+        "title": "ReferenceWindow"
+      },
       "ResearchIdea": {
         "properties": {
           "question": {
@@ -3459,20 +4226,20 @@
           "data_used": {
             "type": "string",
             "maxLength": 4000,
-            "minLength": 1,
-            "title": "Data Used"
+            "title": "Data Used",
+            "default": ""
           },
           "findings": {
             "type": "string",
             "maxLength": 4000,
-            "minLength": 1,
-            "title": "Findings"
+            "title": "Findings",
+            "default": ""
           },
           "next_steps": {
             "type": "string",
             "maxLength": 4000,
-            "minLength": 1,
-            "title": "Next Steps"
+            "title": "Next Steps",
+            "default": ""
           },
           "linked_conversations": {
             "items": {
@@ -3526,15 +4293,23 @@
           "updated_at": {
             "type": "string",
             "title": "Updated At"
+          },
+          "form_snapshot": {
+            "items": {
+              "$ref": "#/components/schemas/IdeaField"
+            },
+            "type": "array",
+            "title": "Form Snapshot"
+          },
+          "criteria_snapshot": {
+            "type": "string",
+            "title": "Criteria Snapshot"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "question",
-          "data_used",
-          "findings",
-          "next_steps",
           "id",
           "user_id",
           "display_name",
@@ -3542,9 +4317,43 @@
           "reviewer_feedback",
           "reviewed_by",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "form_snapshot",
+          "criteria_snapshot"
         ],
         "title": "ResearchIdea"
+      },
+      "ResearchPolicy": {
+        "properties": {
+          "allow_post_cutoff_reference_after_submit": {
+            "type": "boolean",
+            "title": "Allow Post Cutoff Reference After Submit",
+            "default": false
+          },
+          "anonymous_ab_evaluation": {
+            "type": "boolean",
+            "title": "Anonymous Ab Evaluation",
+            "default": false
+          },
+          "invitation_criteria": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Invitation Criteria",
+            "default": ""
+          },
+          "idea_fields": {
+            "items": {
+              "$ref": "#/components/schemas/IdeaField"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Idea Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResearchPolicy"
       },
       "ResearcherSummary": {
         "properties": {
@@ -3629,6 +4438,102 @@
         ],
         "title": "ResearcherSummary"
       },
+      "ReviewMember": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "title": "ReviewMember"
+      },
+      "RuntimeSettings": {
+        "properties": {
+          "site_daily_limit": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Site Daily Limit"
+          },
+          "input_price_per_million_yuan": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Price Per Million Yuan"
+          },
+          "output_price_per_million_yuan": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Price Per Million Yuan"
+          },
+          "max_concurrent_jobs": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent Jobs"
+          },
+          "per_user_concurrent_jobs": {
+            "type": "integer",
+            "const": 1,
+            "title": "Per User Concurrent Jobs"
+          },
+          "max_accounts": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Accounts"
+          },
+          "default_daily_limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Default Daily Limit"
+          },
+          "default_evaluation_reserve": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Default Evaluation Reserve"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "site_daily_limit",
+          "input_price_per_million_yuan",
+          "output_price_per_million_yuan",
+          "max_concurrent_jobs",
+          "per_user_concurrent_jobs",
+          "max_accounts",
+          "default_daily_limit",
+          "default_evaluation_reserve"
+        ],
+        "title": "RuntimeSettings"
+      },
       "Session": {
         "properties": {
           "id": {
@@ -3695,6 +4600,31 @@
       },
       "SiteSettings": {
         "properties": {
+          "allow_post_cutoff_reference_after_submit": {
+            "type": "boolean",
+            "title": "Allow Post Cutoff Reference After Submit",
+            "default": false
+          },
+          "anonymous_ab_evaluation": {
+            "type": "boolean",
+            "title": "Anonymous Ab Evaluation",
+            "default": false
+          },
+          "invitation_criteria": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Invitation Criteria",
+            "default": ""
+          },
+          "idea_fields": {
+            "items": {
+              "$ref": "#/components/schemas/IdeaField"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Idea Fields"
+          },
           "site_daily_limit": {
             "type": "integer",
             "maximum": 10000.0,
@@ -3753,17 +4683,26 @@
             "title": "Per User Concurrent Jobs",
             "default": 1
           },
-          "allow_post_cutoff_reference_after_submit": {
-            "type": "boolean",
-            "const": false,
-            "title": "Allow Post Cutoff Reference After Submit",
-            "default": false
+          "max_accounts": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Accounts",
+            "default": 10
           },
-          "anonymous_ab_evaluation": {
-            "type": "boolean",
-            "const": false,
-            "title": "Anonymous Ab Evaluation",
-            "default": false
+          "default_daily_limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Default Daily Limit",
+            "default": 30
+          },
+          "default_evaluation_reserve": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Default Evaluation Reserve",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -4024,6 +4963,26 @@
               }
             ],
             "title": "Disabled"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "review_feedback",
+                    "review_ideas",
+                    "view_researchers"
+                  ]
+                },
+                "type": "array",
+                "maxItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions"
           }
         },
         "additionalProperties": false,
@@ -4169,6 +5128,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ReferenceHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_cutoff_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceWindow"
               },
               {
                 "type": "null"

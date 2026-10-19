@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Me } from "../api/types";
+import { canManage } from "../lib/auth";
 import { relative } from "../lib/format";
 import { Icon, type IconName } from "./Icon";
 
@@ -54,7 +55,7 @@ function Sidebar({ me, onNavigate }: { me: Me; onNavigate: () => void }) {
         </>}
       </div>
       <div className="sidebar-bottom">
-        {me.role === "admin" && <NavLink to="/admin" onClick={onNavigate} className={({ isActive }) => `nav-item ${isActive ? "is-active" : ""}`}><Icon name="settings" /><span>管理后台</span></NavLink>}
+        {canManage(me) && <NavLink to="/admin" onClick={onNavigate} className={({ isActive }) => `nav-item ${isActive ? "is-active" : ""}`}><Icon name="settings" /><span>{me.role === "admin" ? "管理后台" : "审核工作台"}</span></NavLink>}
         <div className="account-row"><span className="account-avatar">{me.display_name.slice(0, 1).toUpperCase()}</span><div><strong>{me.display_name}</strong><span>今日剩余 {me.quota.remaining_today} 次</span></div><button type="button" className="icon-button" aria-label="退出登录" onClick={logout}><Icon name="logout" size={18} /></button></div>
         {import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !== "0" && <span className="mock-indicator">演示环境</span>}
         {logoutError && <p role="alert" className="text-sm text-warn">退出失败，请重试。</p>}

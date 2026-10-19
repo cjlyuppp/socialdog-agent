@@ -5,6 +5,7 @@ import type {
   Assignment, AssignmentProgress, BankVersion, FeedbackInput, FeedbackIssue, IdeaInput, IdeaStatus, ResearchIdea,
   ResearcherSummary, ReviewStatus, VersionedQuestion,
   ModelCatalog, ModelSelection,
+  BankDraft, BankWorkspace, ResearchPolicy, ReviewMember,
 } from "./types";
 
 export class ApiError extends Error {
@@ -76,9 +77,10 @@ export const api = {
     request<SubmitResponse>("POST", `/api/sessions/${sessionId}/messages`, { question, ...selection }),
   job: (id: string) => request<Job>("GET", `/api/jobs/${id}`),
 
-  referenceMeta: () => request<ReferenceMeta>("GET", "/api/reference/meta"),
+  referenceMeta: (context: Partial<ReferenceQuery> = {}) => request<ReferenceMeta>("GET", "/api/reference/meta" + query({ attempt_id: context.attempt_id, assignment_id: context.assignment_id, bank_version_id: context.bank_version_id })),
   reference: (q: ReferenceQuery) => request<ReferenceResult>("GET", "/api/reference/query" + query({
     scope: q.scope, by: q.by, start_date: q.start_date, end_date: q.end_date, product: q.product,
+    attempt_id: q.attempt_id, assignment_id: q.assignment_id, bank_version_id: q.bank_version_id,
   })),
 
   evalQuestions: () => request<VersionedQuestion[]>("GET", "/api/eval/questions"),
@@ -97,6 +99,7 @@ export const api = {
   allRatings: () => request<Rating[]>("GET", "/api/admin/ratings"),
   settings: () => request<SiteSettings>("GET", "/api/admin/settings"),
   saveSettings: (settings: SiteSettings) => request<SiteSettings>("PUT", "/api/admin/settings", settings),
+  saveRuntime: (settings: SiteSettings) => request<SiteSettings>("PATCH", "/api/admin/settings", Object.fromEntries(["site_daily_limit", "input_price_per_million_yuan", "output_price_per_million_yuan", "max_concurrent_jobs", "per_user_concurrent_jobs", "max_accounts", "default_daily_limit", "default_evaluation_reserve"].map(k => [k, settings[k as keyof SiteSettings]]))),
   feedback: (input: FeedbackInput) => request<FeedbackIssue>("POST", "/api/feedback", input),
   myFeedback: () => request<FeedbackIssue[]>("GET", "/api/feedback/mine"),
   feedbackQueue: (filters: Record<string, string>) => request<FeedbackIssue[]>("GET", "/api/admin/feedback" + query(filters)),
@@ -110,6 +113,12 @@ export const api = {
   assign: (input: { user_id: string; question_id: string; bank_version_id: string; due_at: string | null }) => request<Assignment>("POST", "/api/admin/assignments", input),
   progress: () => request<AssignmentProgress[]>("GET", "/api/admin/progress"),
   bankVersions: () => request<BankVersion[]>("GET", "/api/admin/question-bank/versions"),
+  bankWorkspace: () => request<BankWorkspace>("GET", "/api/admin/question-bank"),
+  saveBankDraft: (body: BankDraft) => request<BankWorkspace>("PUT", "/api/admin/question-bank/draft", body),
+  publishBank: (revision: number) => request<BankWorkspace>("POST", "/api/admin/question-bank/publish", { revision }),
+  researchPolicy: () => request<ResearchPolicy>("GET", "/api/research-policy"),
+  savePolicy: (body: ResearchPolicy) => request<SiteSettings>("PATCH", "/api/admin/research-policy", body),
+  reviewMembers: () => request<ReviewMember[]>("GET", "/api/review/members"),
   researcher: (id: string) => request<ResearcherSummary>("GET", `/api/admin/researchers/${id}`),
   inspectSession: (userId: string, sessionId: string) => request<SessionDetail>("GET", `/api/admin/researchers/${userId}/sessions/${sessionId}`),
 };

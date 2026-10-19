@@ -1,6 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, setCsrfToken } from "../api/client";
-import type { Me } from "../api/types";
+import type { Me, Permission } from "../api/types";
+
+export function can(me: Me, permission: Permission) { return me.role === "admin" || me.permissions.includes(permission); }
+export function canManage(me: Me) { return me.role === "admin" || me.permissions.length > 0; }
 
 export const ME_KEY = ["me"] as const;
 

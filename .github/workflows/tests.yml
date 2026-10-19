@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
-      - run: python -m unittest test_chat_agent test_research_assistant test_feishu_agent_source test_feishu_daily_clean test_factor_inspection test_web_agent test_historical_backtest test_history_agent test_api_server test_research_workspace -v
+      - run: python -m unittest test_chat_agent test_research_assistant test_feishu_agent_source test_feishu_daily_clean test_factor_inspection test_web_agent test_historical_backtest test_history_agent test_api_server test_research_workspace test_admin_configuration -v
   frontend:
     runs-on: ubuntu-latest
     defaults:

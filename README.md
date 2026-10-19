@@ -118,7 +118,7 @@ socialdog-api serve --history-package outputs/history_cut --reference-db outputs
 
 打开 `http://127.0.0.1:8000`，使用 `init-admin` 输出的一次性邀请设置密码。没有默认账号或默认密码。`--local-http` 仅允许本机 HTTP 开发，HTTPS 部署使用默认 Secure cookie。一次只运行一个后端进程；重启时未完成任务标记为失败，不自动重复调用模型。
 
-不传 `--question-bank` 时题库为空。正式题库、数据准备、配额和用量口径见 [多人工作台部署说明](docs/多人工作台部署.md)，接口见 [接口约定](docs/接口约定.md) 和 [OpenAPI](docs/openapi.json)。前端独立开发方法见 [frontend/README.md](frontend/README.md)。
+首次部署不传 `--question-bank` 时题库为空，之后可在管理后台编辑草稿并发布。题库与 T/N、研究规则、审核权限及额度均有管理模块；可选的提交后数据核对和 A/B 评分默认关闭。正式题库、数据准备、配额和用量口径见 [多人工作台部署说明](docs/多人工作台部署.md)，接口见 [接口约定](docs/接口约定.md) 和 [OpenAPI](docs/openapi.json)。前端独立开发方法见 [frontend/README.md](frontend/README.md)。
 
 ## 主要文件
 

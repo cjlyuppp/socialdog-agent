@@ -4,7 +4,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router";
 import { onSessionExpired } from "./api/client";
 import { Layout } from "./components/Layout";
 import { Notice, Spinner } from "./components/ui";
-import { ME_KEY, useMe } from "./lib/auth";
+import { can, canManage, ME_KEY, useMe } from "./lib/auth";
 import { errorText } from "./lib/format";
 import { ChatPage } from "./pages/ChatPage";
 import { EvaluatePage } from "./pages/EvaluatePage";
@@ -47,8 +47,8 @@ export default function App() {
           <Route path="/evaluate" element={<EvaluatePage />} />
           <Route path="/evaluate/:attemptId" element={<EvaluatePage />} />
           <Route path="/ratings" element={<RatingsPage />} />
-          <Route path="/admin" element={me.role === "admin" ? <AdminPage /> : <Navigate to="/chat" replace />} />
-          <Route path="/admin/researchers/:userId" element={me.role === "admin" ? <ResearcherPage /> : <Navigate to="/chat" replace />} />
+          <Route path="/admin" element={canManage(me) ? <AdminPage /> : <Navigate to="/chat" replace />} />
+          <Route path="/admin/researchers/:userId" element={can(me, "view_researchers") ? <ResearcherPage /> : <Navigate to="/chat" replace />} />
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Route>
       ) : (

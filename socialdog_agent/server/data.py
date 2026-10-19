@@ -101,28 +101,44 @@ class ReferenceData:
             raise ValueError("数据核对库与 agent 的截止日期不一致")
         self.cutoff = cutoff
 
-    def metadata(self, *, can_view_after_cutoff=False):
-        where, parameters = ("", ()) if can_view_after_cutoff else (" WHERE order_date<=?", (self.cutoff,))
+    def metadata(self, *, can_view_after_cutoff=False, cutoff=None, post_window=None):
+        cutoff = cutoff or self.cutoff
+        where, parameters = ("", ()) if can_view_after_cutoff else (" WHERE order_date<=?", (cutoff,))
+        if not can_view_after_cutoff and post_window:
+            after = "order_date>? AND order_date>=? AND order_date<=?"
+            parameters += (cutoff, post_window["start_date"], post_window["end_date"])
+            if post_window.get("product"):
+                after += " AND product=?"
+                parameters += (post_window["product"],)
+            where = " WHERE (order_date<=? OR (" + after + "))"
         with readonly(self.path) as db:
             start, end = db.execute("SELECT min(order_date),max(order_date) FROM lines" + where, parameters).fetchone()
             products = [row[0] for row in db.execute("SELECT DISTINCT product FROM lines" + where +
                         (" AND" if where else " WHERE") + " product IS NOT NULL ORDER BY product", parameters)]
-        return {**self.meta, "observation_start": start or self.cutoff, "observation_end": end or self.cutoff,
+        return {**self.meta, "cutoff_date": cutoff, "observation_start": start or cutoff, "observation_end": end or cutoff,
                 "groups": [{"value": key, "label": value} for key, value in GROUP_LABELS.items()],
-                "products": products, "can_view_after_cutoff": can_view_after_cutoff}
+                "products": products, "can_view_after_cutoff": can_view_after_cutoff or bool(post_window)}
 
-    def query(self, query: ReferenceQuery, *, can_view_after_cutoff=False):
+    def query(self, query: ReferenceQuery, *, can_view_after_cutoff=False, cutoff=None, post_window=None):
         args = query.model_dump(mode="json")
-        after = (date.fromisoformat(self.cutoff) + timedelta(days=1)).isoformat()
+        cutoff = cutoff or self.cutoff
+        after = (date.fromisoformat(cutoff) + timedelta(days=1)).isoformat()
         rows = []
         with readonly(self.path) as db:
             # Split mixed groups as well: a product/weekday can have data on both sides of T.
-            for is_after in ((False, True) if can_view_after_cutoff else (False,)):
-                selected = dict(args)
+            for is_after in ((False, True) if can_view_after_cutoff or post_window else (False,)):
+                selected = {k: v for k, v in args.items() if k not in ("attempt_id", "assignment_id", "bank_version_id")}
                 if is_after:
                     selected["start_date"] = max(args["start_date"] or after, after)
+                    if post_window and not can_view_after_cutoff:
+                        selected["start_date"] = max(selected["start_date"], post_window["start_date"])
+                        selected["end_date"] = min(args["end_date"] or post_window["end_date"], post_window["end_date"])
+                        if post_window.get("product"):
+                            if args["product"] and args["product"] != post_window["product"]:
+                                continue
+                            selected["product"] = post_window["product"]
                 else:
-                    selected["end_date"] = min(args["end_date"] or self.cutoff, self.cutoff)
+                    selected["end_date"] = min(args["end_date"] or cutoff, cutoff)
                 if selected["start_date"] and selected["end_date"] and selected["start_date"] > selected["end_date"]:
                     continue
                 result = to_yuan(history.aggregate_connection(db, selected))
@@ -130,7 +146,7 @@ class ReferenceData:
         rows.sort(key=lambda r: (int(r["group"]) if args["by"] in ("hour", "weekday") else r["group"], r["after_cutoff"]))
         return {"query": args, "rows": rows, "group_order_counts_additive": args["by"] not in ("category", "product", "type"),
                 "notes": ["金额为来源记录收款，不等于净收入、利润或银行到账。",
-                          "同一分组按截止日期前后分别列示。" if can_view_after_cutoff else f"仅返回 {self.cutoff} 及之前的数据。"]}
+                          "同一分组按截止日期前后分别列示。" if can_view_after_cutoff or post_window else f"仅返回 {cutoff} 及之前的数据。"]}
 
 
 def load_questions(path: Path | None):

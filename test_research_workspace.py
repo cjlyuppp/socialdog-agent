@@ -143,10 +143,16 @@ class WorkspaceTests(unittest.TestCase):
         changed = Workflow(self.store, self.app.state.source, {'q-data': {'id': 'q-data', 'category': 'quality', 'title': '新的标题', 'question': '新的问题'}})
         with self.store.connection(write=True) as db:
             changed.active_bank(db)
+        # A restarted CLI file cannot overwrite an administrator's published bank.
+        self.assertEqual(reader.get('/api/eval/questions').json()[0]['title'], '数据范围')
+        draft = self.client.get('/api/admin/question-bank').json()['draft']
+        draft['questions'][0]['title'] = '新的标题'
+        saved = self.client.put('/api/admin/question-bank/draft', json=draft).json()
+        self.assertEqual(self.client.post('/api/admin/question-bank/publish', json={'revision': saved['draft']['revision']}).status_code, 200)
         self.assertEqual(reader.get('/api/eval/attempts/' + attempt['id']).json()['question_snapshot']['title'], '数据范围')
         self.assertGreaterEqual(len(self.client.get('/api/admin/question-bank/versions').json()), 3)
         bad = self.client.get('/api/admin/settings').json()
-        self.assertEqual(self.client.put('/api/admin/settings', json={**bad, 'cutoff_date': '2023-03-31'}).status_code, 409)
+        self.assertEqual(self.client.put('/api/admin/settings', json={**bad, 'cutoff_date': '2024-03-31'}).status_code, 400)
 
     def test_model_failure_does_not_erase_independent_submission(self):
         reader, user_id, _ = self.new_user()

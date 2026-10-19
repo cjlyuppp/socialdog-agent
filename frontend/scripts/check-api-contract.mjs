@@ -55,7 +55,7 @@ function literals(node) {
 }
 
 let count = 0;
-const responses = ["Quota", "Me", "AdminUser", "InviteInfo", "InviteLink", "DataStatus", "Session", "SessionDetail", "Evidence", "Grounding", "AgentResult", "Turn", "ProgressEvent", "Job", "ReferenceMeta", "ReferenceQuery", "ReferenceRow", "ReferenceResult", "VersionedQuestion", "RatingScores", "EvalAttempt", "Rating", "UsageLine", "UsageReport", "SiteSettings", "FeedbackIssue", "ResearchIdea", "Assignment", "AssignmentProgress", "BankVersion", "ResearcherSummary", "ModelOption", "ModelCatalog"];
+const responses = ["Quota", "Me", "AdminUser", "InviteInfo", "InviteLink", "DataStatus", "Session", "SessionDetail", "Evidence", "Grounding", "AgentResult", "Turn", "ProgressEvent", "Job", "ReferenceMeta", "ReferenceQuery", "ReferenceRow", "ReferenceResult", "VersionedQuestion", "RatingScores", "EvalAttempt", "Rating", "UsageLine", "UsageReport", "SiteSettings", "FeedbackIssue", "ResearchIdea", "Assignment", "AssignmentProgress", "BankVersion", "ResearcherSummary", "ModelOption", "ModelCatalog", "ReferenceWindow", "IdeaField", "ResearchPolicy", "BankDraft", "BankDetail", "BankWorkspace", "ReviewMember"];
 for (const name of responses) {
   const schema = schemas[name + "-Output"] ?? schemas[name];
   assert.ok(schema, `Missing API response schema ${name}`);

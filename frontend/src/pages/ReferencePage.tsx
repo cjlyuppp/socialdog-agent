@@ -3,9 +3,11 @@ import { api } from "../api/client";
 import { Page } from "../components/Layout";
 import { ReferenceExplorer } from "../components/ReferenceExplorer";
 import { Card, PageHeader } from "../components/ui";
+import { useMe } from "../lib/auth";
 
 export function ReferencePage() {
-  const meta = useQuery({ queryKey: ["reference-meta"], queryFn: api.referenceMeta, staleTime: Infinity });
+  const me = useMe().data!;
+  const meta = useQuery({ queryKey: ["reference-meta", me.id, me.role, "access-v3", {}], queryFn: () => api.referenceMeta() });
   return (
     <Page wide>
       <PageHeader

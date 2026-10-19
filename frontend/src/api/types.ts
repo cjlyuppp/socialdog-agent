@@ -3,6 +3,7 @@
 // Errors are always `{ "error": string }` with a non-2xx status.
 
 export type Role = "admin" | "researcher";
+export type Permission = "review_feedback" | "review_ideas" | "view_researchers";
 
 export interface Quota {
   daily_limit: number;
@@ -25,6 +26,7 @@ export interface Me {
   /** Each researcher may run at most one job at a time. */
   running_job_id: string | null;
   notice_version: number;
+  permissions: Permission[];
 }
 
 export interface InviteInfo {
@@ -143,6 +145,9 @@ export interface ReferenceQuery {
   start_date: string | null;
   end_date: string | null;
   product: string | null;
+  attempt_id?: string | null;
+  assignment_id?: string | null;
+  bank_version_id?: string | null;
 }
 
 export interface ReferenceRow {
@@ -176,7 +181,9 @@ export interface EvalQuestion {
   question: string;
   /** Suggested reference query for writing one's own answer first. */
   reference_hint: Partial<ReferenceQuery> | null;
+  post_cutoff_reference: ReferenceWindow | null;
 }
+export interface ReferenceWindow { start_date: string; end_date: string; product: string | null }
 
 export interface VersionedQuestion extends EvalQuestion { bank_version_id: string }
 
@@ -198,6 +205,8 @@ export interface EvalAttempt {
   rated: boolean;
   bank_version_id: string | null;
   question_snapshot: Record<string, unknown> | null;
+  anonymous_ab: boolean;
+  answer_panels: Record<string, string>[];
 }
 
 export interface Rating {
@@ -212,11 +221,13 @@ export interface Rating {
   note: string;
   created_at: string;
   username: string;
+  anonymous_scores?: Record<string, RatingScores> | null;
 }
 
 export interface RatingInput {
   attempt_id: string;
-  scores: RatingScores;
+  scores?: RatingScores;
+  anonymous_scores?: Record<"A" | "B", RatingScores>;
   note: string;
   issues?: IssueDraft[];
 }
@@ -234,14 +245,16 @@ export interface AdminUser {
   used_today: number;
   last_active_at: string | null;
   invite_pending: boolean;
+  permissions: Permission[];
 }
 
 export interface NewUser {
   username: string;
   display_name: string;
   role: Role;
-  daily_limit: number;
+  daily_limit?: number;
   evaluation_reserve?: number;
+  permissions?: Permission[];
 }
 
 export interface UserPatch {
@@ -249,6 +262,7 @@ export interface UserPatch {
   daily_limit?: number;
   evaluation_reserve?: number;
   disabled?: boolean;
+  permissions?: Permission[];
 }
 
 export interface InviteLink {
@@ -270,7 +284,14 @@ export interface UsageReport {
   by_day: (UsageLine & { date: string })[];
 }
 
-export interface SiteSettings {
+export interface IdeaField { key: "question" | "data_used" | "findings" | "next_steps"; label: string; hint: string; required: boolean }
+export interface ResearchPolicy {
+  allow_post_cutoff_reference_after_submit: boolean;
+  anonymous_ab_evaluation: boolean;
+  invitation_criteria: string;
+  idea_fields: IdeaField[];
+}
+export interface SiteSettings extends ResearchPolicy {
   site_daily_limit: number;
   min_orders_per_group: number;
   cutoff_date: string;
@@ -278,8 +299,9 @@ export interface SiteSettings {
   output_price_per_million_yuan: number | null;
   max_concurrent_jobs: number;
   per_user_concurrent_jobs: number;
-  allow_post_cutoff_reference_after_submit: false;
-  anonymous_ab_evaluation: false;
+  max_accounts: number;
+  default_daily_limit: number;
+  default_evaluation_reserve: number;
 }
 
 export type Stage = "retrieval" | "definition" | "calculation" | "reasoning" | "conclusion" | "other";
@@ -303,6 +325,7 @@ export interface IdeaInput {
 export interface ResearchIdea extends IdeaInput {
   id: string; user_id: string; display_name: string; status: IdeaStatus; reviewer_feedback: string;
   reviewed_by: string | null; created_at: string; updated_at: string;
+  form_snapshot: IdeaField[]; criteria_snapshot: string;
 }
 export interface Assignment {
   id: string; question_id: string; bank_version_id: string; user_id: string; display_name: string;
@@ -314,6 +337,10 @@ export interface BankVersion {
   id: string; cutoff_T: string | null; threshold_N: number | null; dataset_version: string | null;
   legacy: boolean; created_at: string; question_count: number;
 }
+export interface BankDraft { revision: number; name: string; cutoff_T: string; threshold_N: number; questions: EvalQuestion[] }
+export interface BankDetail extends BankVersion { name: string; questions: EvalQuestion[]; active: boolean }
+export interface BankWorkspace { draft: BankDraft; active: BankDetail; versions: BankDetail[]; can_change_cutoff: boolean; earliest_date: string; latest_date: string }
+export interface ReviewMember { id: string; display_name: string }
 export interface ResearcherSummary {
   user: AdminUser; quota: Quota; question_count: number;
   recent_questions: { id: string; question: string; session_id: string; created_at: string }[];

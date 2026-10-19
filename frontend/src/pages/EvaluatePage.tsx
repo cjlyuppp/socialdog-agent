@@ -77,7 +77,7 @@ function OwnAnswerStep({ question, assignmentId }: { question: VersionedQuestion
       {question.reference_hint && (
         <Card className="p-4">
           <div className="mb-4 text-sm font-medium">参考数据</div>
-          <ReferenceExplorer initial={question.reference_hint} compact />
+          <ReferenceExplorer initial={question.reference_hint} compact context={assignmentId ? { assignment_id: assignmentId } : { bank_version_id: question.bank_version_id }} />
         </Card>
       )}
       <Card className="p-5">
@@ -99,17 +99,19 @@ function OwnAnswerStep({ question, assignmentId }: { question: VersionedQuestion
 function RatingForm({ attempt }: { attempt: EvalAttempt }) {
   const client = useQueryClient();
   const [scores, setScores] = useState<Partial<RatingScores>>({});
+  const [otherScores, setOtherScores] = useState<Partial<RatingScores>>({});
   const [note, setNote] = useState("");
   const [issues, setIssues] = useState<IssueDraft[]>([]);
   const rate = useMutation({
-    mutationFn: () => api.rate({ attempt_id: attempt.id, scores: scores as RatingScores, note: note.trim(), issues }),
+    mutationFn: () => api.rate({ attempt_id: attempt.id, ...(attempt.anonymous_ab ? { anonymous_scores: { A: scores as RatingScores, B: otherScores as RatingScores } } : { scores: scores as RatingScores, issues }), note: note.trim() }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["attempt", attempt.id] });
       client.invalidateQueries({ queryKey: ["ratings"] });
       client.invalidateQueries({ queryKey: ["my-feedback"] });
     },
   });
-  const complete = scores.numbers && SCALES.every((s) => scores[s.key]);
+  const isComplete = (values: Partial<RatingScores>) => values.numbers && SCALES.every(s => values[s.key]);
+  const complete = isComplete(scores) && (!attempt.anonymous_ab || isComplete(otherScores));
 
   if (attempt.rated) {
     return (
@@ -121,12 +123,26 @@ function RatingForm({ attempt }: { attempt: EvalAttempt }) {
   return (
     <Card className="p-5">
       <h2 className="mb-6 text-lg font-semibold">评价回答</h2>
+      <ScoreFields scores={scores} setScores={setScores} prefix={attempt.anonymous_ab ? "A" : "model"} label={attempt.anonymous_ab ? "答案 A" : undefined} />
+      {attempt.anonymous_ab && <ScoreFields scores={otherScores} setScores={setOtherScores} prefix="B" label="答案 B" />}
+      <Field label="备注（可选）"><Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="哪里答错了、漏说了什么、口径哪里不清楚" /></Field>
+      {!attempt.anonymous_ab && <IssueListEditor issues={issues} onChange={setIssues} evidence={attempt.turn.result?.evidence ?? []} />}
+      {rate.error && <div className="mt-3"><Notice>{errorText(rate.error)}</Notice></div>}
+      <div className="mt-4 flex justify-end">
+        <Button variant="primary" disabled={!complete || issues.some(i => !i.description.trim()) || rate.isPending} onClick={() => rate.mutate()}>提交打分</Button>
+      </div>
+    </Card>
+  );
+}
+
+function ScoreFields({ scores, setScores, prefix, label }: { scores: Partial<RatingScores>; setScores: (scores: Partial<RatingScores>) => void; prefix: string; label?: string }) {
+  return <div className="mb-6 border-b border-line pb-3">{label && <h3 className="mb-5 font-semibold">{label}</h3>}
       <fieldset className="mb-5">
         <legend className="mb-3 text-sm font-medium">数字是否正确</legend>
         <div className="flex flex-wrap gap-2">
           {VERDICTS.map((v) => (
             <label key={v.value} className={`score-option cursor-pointer rounded-lg border px-3 py-2 text-sm ${scores.numbers === v.value ? "border-accent bg-accent-soft text-accent" : "border-line hover:bg-sidebar"}`}>
-              <input type="radio" name="numbers" className="sr-only" checked={scores.numbers === v.value} onChange={() => setScores({ ...scores, numbers: v.value })} />
+              <input type="radio" name={`${prefix}-numbers`} aria-label={label ? `${label} ${v.label}` : undefined} className="sr-only" checked={scores.numbers === v.value} onChange={() => setScores({ ...scores, numbers: v.value })} />
               {v.label}
             </label>
           ))}
@@ -139,25 +155,19 @@ function RatingForm({ attempt }: { attempt: EvalAttempt }) {
           <div className="flex gap-1.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <label key={n} className={`score-option grid h-10 w-10 cursor-pointer place-items-center rounded-lg border text-sm ${scores[scale.key] === n ? "border-accent bg-accent-soft text-accent" : "border-line hover:bg-sidebar"}`}>
-                <input type="radio" name={scale.key} aria-label={`${scale.label} ${n} 分`} className="sr-only" checked={scores[scale.key] === n} onChange={() => setScores({ ...scores, [scale.key]: n })} />
+                <input type="radio" name={`${prefix}-${scale.key}`} aria-label={`${label ? label + " " : ""}${scale.label} ${n} 分`} className="sr-only" checked={scores[scale.key] === n} onChange={() => setScores({ ...scores, [scale.key]: n })} />
                 {n}
               </label>
             ))}
           </div>
         </fieldset>
       ))}
-      <Field label="备注（可选）"><Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="哪里答错了、漏说了什么、口径哪里不清楚" /></Field>
-      <IssueListEditor issues={issues} onChange={setIssues} evidence={attempt.turn.result?.evidence ?? []} />
-      {rate.error && <div className="mt-3"><Notice>{errorText(rate.error)}</Notice></div>}
-      <div className="mt-4 flex justify-end">
-        <Button variant="primary" disabled={!complete || issues.some(i => !i.description.trim()) || rate.isPending} onClick={() => rate.mutate()}>提交打分</Button>
-      </div>
-    </Card>
-  );
+    </div>;
 }
 
 function AttemptView({ attemptId }: { attemptId: string }) {
   const client = useQueryClient();
+  const policy = useQuery({ queryKey: ["research-policy"], queryFn: api.researchPolicy });
   const attempt = useQuery({ queryKey: ["attempt", attemptId], queryFn: () => api.attempt(attemptId) });
   const running = attempt.data?.turn.status === "running";
   const job = useJob(running ? attempt.data?.job_id : null);
@@ -173,13 +183,15 @@ function AttemptView({ attemptId }: { attemptId: string }) {
   if (attempt.error) return <Notice>{errorText(attempt.error)}</Notice>;
   const question = attempt.data.question_snapshot as unknown as VersionedQuestion | null;
   const { turn } = attempt.data;
+  const blind = attempt.data.anonymous_ab && !attempt.data.rated;
 
   return (
     <div className="space-y-5">
       <Link to="/evaluate" className="text-xs text-muted hover:text-ink">← 返回题目列表</Link>
       <h2 className="text-xl font-medium leading-9">{turn.question}</h2>
+      {attempt.data.anonymous_ab && attempt.data.rated && <Notice tone="neutral">{attempt.data.answer_panels.map(p => `答案 ${p.label}：${p.source === "agent" ? "研究助理" : "我的答案"}`).join("；")}</Notice>}
       {/* min-w-0: a wide answer table must scroll inside its card, not widen the grid. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+      {blind ? <div className="grid gap-4 lg:grid-cols-2">{turn.status === "running" ? <JobProgress job={job.data} /> : turn.status === "error" ? <Notice>{turn.error}</Notice> : attempt.data.answer_panels.map(p => <Card className="min-w-0 p-5" key={p.label}><h3 className="mb-4 font-semibold">答案 {p.label}</h3><Markdown text={p.answer} /></Card>)}</div> : <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Card className="p-5">
           <div className="mb-4 text-sm font-semibold">我的答案</div>
           <p className="text-[15px] leading-7 whitespace-pre-wrap">{attempt.data.own_answer}</p>
@@ -201,11 +213,11 @@ function AttemptView({ attemptId }: { attemptId: string }) {
             </>
           )}
         </Card>
-      </div>
-      {question?.reference_hint && turn.status !== "running" && (
+      </div>}
+      {(question?.reference_hint || question?.post_cutoff_reference) && turn.status !== "running" && (
         <details className="rounded-xl border border-line bg-surface p-4">
           <summary className="cursor-pointer text-sm font-medium">核对参考数据</summary>
-          <div className="mt-4"><ReferenceExplorer initial={question.reference_hint} compact /></div>
+          <div className="mt-4"><ReferenceExplorer key={String(policy.data?.allow_post_cutoff_reference_after_submit)} initial={policy.data?.allow_post_cutoff_reference_after_submit && question.post_cutoff_reference ? { by: "day", ...question.post_cutoff_reference } : question.reference_hint} compact context={{ attempt_id: attempt.data.id }} /></div>
         </details>
       )}
       {turn.status === "ok" && <RatingForm attempt={attempt.data} />}

@@ -1,5 +1,6 @@
 # Local research data, pseudonymization secrets, and audit logs.
 research_local/
+data-versions/
 outputs/
 data/
 node_modules

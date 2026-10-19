@@ -30,12 +30,48 @@ class Workflow:
 
     def save_bank(self, db, content):
         version = digest(json.dumps(content, sort_keys=True, ensure_ascii=False))[:32]
-        db.execute("INSERT OR IGNORE INTO question_bank_version VALUES (?,?,?,?,?,?,?)", (version, content["cutoff_T"], content["threshold_N"], content["dataset_version"], encoded(content["questions"]), int(content["legacy"]), now()))
+        db.execute("INSERT OR IGNORE INTO question_bank_version(id,cutoff_T,threshold_N,dataset_version,questions,legacy,created_at,name) VALUES (?,?,?,?,?,?,?,?)", (version, content["cutoff_T"], content["threshold_N"], content["dataset_version"], encoded(content["questions"]), int(content["legacy"]), now(), content.get("name", "")))
         return version
 
     def active_bank(self, db):
+        active = db.execute("SELECT version_id FROM question_bank_active WHERE id=1").fetchone()
+        if active:
+            return active[0]
         settings = self.store.settings(db)
-        return self.save_bank(db, {"cutoff_T": self.source.cutoff, "threshold_N": settings["min_orders_per_group"], "dataset_version": self.source.description["dataset_version"], "questions": list(self.questions.values()), "legacy": False})
+        version = self.save_bank(db, {"cutoff_T": self.source.cutoff, "threshold_N": settings["min_orders_per_group"], "dataset_version": self.source.description["dataset_version"], "questions": list(self.questions.values()), "legacy": False, "name": "已导入题库" if self.questions else "未发布题目"})
+        db.execute("INSERT INTO question_bank_active VALUES (1,?)", (version,))
+        return version
+
+    def reference_access(self, db, user, *, attempt_id=None, assignment_id=None, bank_version_id=None):
+        cutoff, window = self.store.settings(db)["cutoff_date"], None
+        if user["role"] == "admin":
+            return {"cutoff": cutoff, "can_view_after_cutoff": True}
+        if sum(bool(v) for v in (attempt_id, assignment_id, bank_version_id)) > 1:
+            raise APIError(400, "请只指定一个核对上下文。")
+        version, question_id = None, None
+        if attempt_id:
+            attempt = db.execute("SELECT * FROM attempts WHERE id=? AND user_id=?", (attempt_id, user["id"])).fetchone()
+            if not attempt:
+                raise APIError(404, "未找到该测评。")
+            version, question_id = attempt["bank_version_id"], attempt["question_id"]
+        elif assignment_id:
+            assigned = db.execute("SELECT * FROM assignment WHERE id=? AND user_id=?", (assignment_id, user["id"])).fetchone()
+            if not assigned:
+                raise APIError(404, "未找到该待办。")
+            version, question_id = assigned["bank_version_id"], assigned["question_id"]
+        elif bank_version_id:
+            if bank_version_id != self.active_bank(db):
+                raise APIError(403, "请从自己的待办或作答记录查看旧版本数据。")
+            version = bank_version_id
+        if version:
+            bank = db.execute("SELECT * FROM question_bank_version WHERE id=?", (version,)).fetchone()
+            if not bank or not bank["cutoff_T"]:
+                raise APIError(409, "该历史测评的数据边界无法确认，暂不能核对。")
+            cutoff = bank["cutoff_T"]
+            if attempt_id and self.store.settings(db)["allow_post_cutoff_reference_after_submit"]:
+                question = self.question(db, question_id, version)
+                window = question.get("post_cutoff_reference")
+        return {"cutoff": cutoff, "post_window": window}
 
     def question(self, db, question_id, version=None):
         version = version or self.active_bank(db)
@@ -49,10 +85,12 @@ class Workflow:
         turn = db.execute("SELECT * FROM turns WHERE id=? AND user_id=?", (turn_id, user_id)).fetchone()
         if not turn:
             raise APIError(404, "未找到该回答。")
-        actual_attempt = db.execute("SELECT id FROM attempts WHERE turn_id=? AND user_id=?", (turn_id, user_id)).fetchone()
+        actual_attempt = db.execute("SELECT id,anonymous_ab FROM attempts WHERE turn_id=? AND user_id=?", (turn_id, user_id)).fetchone()
         if source == "evaluation":
             if not actual_attempt or actual_attempt[0] != attempt_id:
                 raise APIError(404, "未找到该测评回答。")
+            if actual_attempt["anonymous_ab"] and not db.execute("SELECT 1 FROM ratings WHERE attempt_id=?", (attempt_id,)).fetchone():
+                raise APIError(409, "请先完成 A/B 评分，揭示来源后再提交问题反馈。")
         elif actual_attempt or attempt_id or not turn["session_id"]:
             raise APIError(400, "反馈来源与回答不匹配。")
         if turn["status"] != "ok" or not turn["result"]:
@@ -70,14 +108,14 @@ class Workflow:
         return [{**dict(r), "evidence_snapshot": json.loads(r["evidence_snapshot"]), "evidence_refs": json.loads(r["evidence_refs"])} for r in rows]
 
     def ideas(self, db, where="1=1", params=()):
-        return [{**dict(r), "linked_conversations": json.loads(r["linked_conversations"])} for r in db.execute(f"SELECT i.*,u.display_name FROM research_idea i JOIN users u ON u.id=i.user_id WHERE {where} ORDER BY i.created_at DESC,i.rowid DESC", params)]
+        return [{**dict(r), "linked_conversations": json.loads(r["linked_conversations"]), "form_snapshot": json.loads(r["form_snapshot"]) if r["form_snapshot"] else [f.model_dump() for f in m.default_idea_fields()]} for r in db.execute(f"SELECT i.*,u.display_name FROM research_idea i JOIN users u ON u.id=i.user_id WHERE {where} ORDER BY i.created_at DESC,i.rowid DESC", params)]
 
     def assignments(self, db, user_id=None):
         rows = db.execute("SELECT a.*,u.display_name FROM assignment a JOIN users u ON u.id=a.user_id" + (" WHERE a.user_id=?" if user_id else "") + " ORDER BY a.created_at DESC,a.rowid DESC", (user_id,) if user_id else ())
         return [{**dict(r), "completed": r["attempt_id"] is not None, "overdue": bool(not r["attempt_id"] and r["due_at"] and r["due_at"] < today()), "question": self.question(db, r["question_id"], r["bank_version_id"])} for r in rows]
 
 
-def register_workflow(app, workflow, identity, admin):
+def register_workflow(app, workflow, identity, admin, capability):
     store = workflow.store
 
     @app.post("/api/notice/accept", response_model=m.Me)
@@ -98,7 +136,7 @@ def register_workflow(app, workflow, identity, admin):
             return workflow.issues(db, "f.user_id=?", (auth[0]["id"],))
 
     @app.get("/api/admin/feedback", response_model=list[m.FeedbackIssue])
-    def feedback_queue(source: Literal["chat", "evaluation"] | None = None, stage: m.Stage | None = None, user_id: str | None = None, review_status: m.ReviewStatus | None = None, auth=Depends(admin)):
+    def feedback_queue(source: Literal["chat", "evaluation"] | None = None, stage: m.Stage | None = None, user_id: str | None = None, review_status: m.ReviewStatus | None = None, auth=Depends(capability("review_feedback"))):
         conditions, params = [], []
         for name, value in (("source", source), ("stage", stage), ("user_id", user_id), ("review_status", review_status)):
             if value is not None:
@@ -108,7 +146,7 @@ def register_workflow(app, workflow, identity, admin):
             return workflow.issues(db, " AND ".join(conditions) or "1=1", params)
 
     @app.patch("/api/admin/feedback/{issue_id}", response_model=m.FeedbackIssue)
-    def review_issue(issue_id: str, body: m.IssueReview, auth=Depends(admin)):
+    def review_issue(issue_id: str, body: m.IssueReview, auth=Depends(capability("review_feedback"))):
         with store.connection(write=True) as db:
             if not db.execute("SELECT 1 FROM feedback_issue WHERE id=?", (issue_id,)).fetchone():
                 raise APIError(404, "未找到该问题反馈。")
@@ -116,7 +154,7 @@ def register_workflow(app, workflow, identity, admin):
             return workflow.issues(db, "f.id=?", (issue_id,))[0]
 
     @app.get("/api/admin/improvements/export.json", response_model=list[m.FeedbackIssue])
-    def export_improvements(auth=Depends(admin)):
+    def export_improvements(auth=Depends(capability("review_feedback"))):
         with store.connection() as db:
             rows = workflow.issues(db, "f.review_status='confirmed'")
         return Response(encoded(rows), media_type="application/json", headers={"Content-Disposition": 'attachment; filename="model-improvements.json"'})
@@ -125,9 +163,13 @@ def register_workflow(app, workflow, identity, admin):
     def create_idea(body: m.IdeaInput, auth=Depends(identity)):
         idea_id, stamp = uid(), now()
         with store.connection(write=True) as db:
+            settings = store.settings(db)
+            for field in settings["idea_fields"]:
+                if field["required"] and not getattr(body, field["key"]).strip():
+                    raise APIError(400, f"请填写{field['label']}。")
             for session_id in body.linked_conversations:
                 store.session(db, session_id, auth[0]["id"])
-            db.execute("INSERT INTO research_idea(id,user_id,question,data_used,findings,next_steps,linked_conversations,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)", (idea_id, auth[0]["id"], body.question.strip(), body.data_used.strip(), body.findings.strip(), body.next_steps.strip(), encoded(list(dict.fromkeys(body.linked_conversations))), stamp, stamp))
+            db.execute("INSERT INTO research_idea(id,user_id,question,data_used,findings,next_steps,linked_conversations,created_at,updated_at,form_snapshot,criteria_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (idea_id, auth[0]["id"], body.question.strip(), body.data_used.strip(), body.findings.strip(), body.next_steps.strip(), encoded(list(dict.fromkeys(body.linked_conversations))), stamp, stamp, encoded(settings["idea_fields"]), settings["invitation_criteria"]))
             return workflow.ideas(db, "i.id=?", (idea_id,))[0]
 
     @app.get("/api/ideas/mine", response_model=list[m.ResearchIdea])
@@ -136,12 +178,12 @@ def register_workflow(app, workflow, identity, admin):
             return workflow.ideas(db, "i.user_id=?", (auth[0]["id"],))
 
     @app.get("/api/admin/ideas", response_model=list[m.ResearchIdea])
-    def all_ideas(auth=Depends(admin)):
+    def all_ideas(auth=Depends(capability("review_ideas"))):
         with store.connection() as db:
             return workflow.ideas(db)
 
     @app.patch("/api/admin/ideas/{idea_id}", response_model=m.ResearchIdea)
-    def review_idea(idea_id: str, body: m.IdeaReview, auth=Depends(admin)):
+    def review_idea(idea_id: str, body: m.IdeaReview, auth=Depends(capability("review_ideas"))):
         with store.connection(write=True) as db:
             if not db.execute("SELECT 1 FROM research_idea WHERE id=?", (idea_id,)).fetchone():
                 raise APIError(404, "未找到该研究想法。")
@@ -190,7 +232,7 @@ def register_workflow(app, workflow, identity, admin):
             return [store.attempt(db, r[0], auth[0]["id"]) for r in db.execute("SELECT id FROM attempts WHERE user_id=? ORDER BY rowid DESC", (auth[0]["id"],))]
 
     @app.get("/api/admin/researchers/{user_id}", response_model=m.ResearcherSummary)
-    def researcher_summary(user_id: str, auth=Depends(admin)):
+    def researcher_summary(user_id: str, auth=Depends(capability("view_researchers"))):
         with store.connection() as db:
             user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
             if not user:
@@ -203,7 +245,7 @@ def register_workflow(app, workflow, identity, admin):
             return {"user": store.public_user(db, user), "quota": store.quota(db, user), "question_count": count, "recent_questions": recent, "ratings": [json.loads(r[0]) for r in db.execute("SELECT value FROM ratings WHERE user_id=? ORDER BY created_at DESC", (user_id,))], "feedback_count": len(issues), "confirmed_count": confirmed, "reviewed_count": reviewed, "confirmed_ratio": confirmed / reviewed if reviewed else None, "ideas": workflow.ideas(db, "i.user_id=?", (user_id,)), "assignments": workflow.assignments(db, user_id)}
 
     @app.get("/api/admin/researchers/{user_id}/sessions/{session_id}", response_model=m.SessionDetail)
-    def inspect_conversation(user_id: str, session_id: str, auth=Depends(admin)):
+    def inspect_conversation(user_id: str, session_id: str, auth=Depends(capability("view_researchers"))):
         with store.connection() as db:
             owner = db.execute("SELECT notice_version FROM users WHERE id=?", (user_id,)).fetchone()
             if not owner or owner[0] < NOTICE_VERSION:
