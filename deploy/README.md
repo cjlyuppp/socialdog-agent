@@ -32,6 +32,6 @@ econ.socialdog.cn {
 }
 ```
 
-先使用现有容器 `caddy validate --config - --adapter caddyfile` 验证完整候选配置，再原地写入宿主机 Caddyfile。该文件通过单文件 bind mount 挂载，不要替换 inode。当前网关使用 `caddy run --config` 且关闭管理 API，发送 `docker kill --signal=USR1 anju-caddy-1` 平滑重载；不重启其他应用。Caddy 自动签发并续期证书。
+先使用现有容器 `caddy validate --config - --adapter caddyfile` 验证完整候选配置，再原地写入宿主机 Caddyfile。该文件通过单文件 bind mount 挂载，不要替换 inode。当前网关为 Caddy 2.10.2 且关闭管理 API，不支持通过 SIGUSR1 重载（该能力从2.11才提供）。配置验证后使用 `docker restart --timeout 10 anju-caddy-1` 加载新域名，会造成短暂网关访问中断；不重启业务应用容器。Caddy 自动签发并续期证书。
 
 验收：容器 healthy、HTTPS 正常、未登录 `/api/me` 返回401、邀请有效、真实数据边界与 DeepSeek 连接正常；同时核对原有域名仍可访问。不要使用 `curl -k` 作为 HTTPS 验收。
