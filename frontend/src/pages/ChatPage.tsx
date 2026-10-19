@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { DataStatus, Turn } from "../api/types";
 import { EvidenceList, GroundingWarning, JobProgress, Markdown } from "../components/answer";
 import { Icon } from "../components/Icon";
+import { FeedbackButton } from "../components/Feedback";
+import { EFFORT_LABELS, ModelPicker, useModelSelection } from "../components/ModelPicker";
+import type { ReasoningEffort } from "../api/types";
 import { Notice, Spinner } from "../components/ui";
 import { ME_KEY, useMe } from "../lib/auth";
 import { dateTime, errorText } from "../lib/format";
@@ -28,6 +31,7 @@ function DataInfo({ status, error }: { status?: DataStatus; error: boolean }) {
           <dt>模型</dt><dd>{status?.model ?? "—"}</dd>
         </dl>
         <p>仅查询截止日期及之前的数据。不足最少订单数的分组不展示。</p>
+        <p>管理员可查看你的对话和提交内容，用于研究协作、研究能力评估与模型改进。</p>
         <details className="technical-details"><summary>数据版本</summary><p>{status?.dataset_version ?? "—"}</p></details>
       </div>
     </details>
@@ -63,10 +67,11 @@ function TurnView({ turn }: { turn: Turn }) {
                 <summary><Icon name="data" size={16} />查看依据<span>{turn.result.evidence.length}</span></summary>
                 <div className="evidence-content">
                   <EvidenceList evidence={turn.result.evidence} />
-                  <details className="technical-details"><summary>回答信息</summary><dl><dt>时间</dt><dd>{dateTime(turn.created_at)}</dd><dt>模型</dt><dd>{turn.result.model}</dd><dt>记录编号</dt><dd>{turn.result.request_id}</dd></dl></details>
+                  <details className="technical-details"><summary>回答信息</summary><dl><dt>时间</dt><dd>{dateTime(turn.created_at)}</dd><dt>模型</dt><dd>{turn.result.model}</dd><dt>思考强度</dt><dd>{EFFORT_LABELS[turn.result.reasoning_effort as ReasoningEffort] ?? "未记录"}</dd><dt>记录编号</dt><dd>{turn.result.request_id}</dd></dl></details>
                 </div>
               </details>
               <button type="button" className="copy-answer" onClick={copy}><Icon name={copyState === "copied" ? "check" : "copy"} size={16} />{copyState === "copied" ? "已复制" : copyState === "error" ? "复制失败，重试" : "复制"}</button>
+              <FeedbackButton turnId={turn.id} evidence={turn.result.evidence} />
             </div>
           </>}
         </div>
@@ -77,9 +82,12 @@ function TurnView({ turn }: { turn: Turn }) {
 
 export function ChatPage() {
   const { sessionId } = useParams();
+  const location = useLocation();
+  const draft = (location.state as { researchDraft?: unknown } | null)?.researchDraft;
   const navigate = useNavigate();
   const client = useQueryClient();
   const me = useMe().data!;
+  const modelControls = useModelSelection();
   const [question, setQuestion] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -102,12 +110,22 @@ export function ChatPage() {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }, [turns.length, turns[turns.length - 1]?.status]);
 
-  useEffect(() => { setQuestion(""); }, [sessionId]);
+  useEffect(() => {
+    setQuestion(typeof draft === "string" ? draft.slice(0, 4000) : "");
+    if (typeof draft === "string") input.current?.focus();
+  }, [sessionId, draft, location.key]);
+
+  useEffect(() => {
+    if (input.current) {
+      input.current.style.height = "auto";
+      input.current.style.height = `${Math.min(input.current.scrollHeight, 180)}px`;
+    }
+  }, [question]);
 
   const ask = useMutation({
     mutationFn: async (text: string) => {
       const id = sessionId ?? (await api.createSession()).id;
-      await api.ask(id, text);
+      await api.ask(id, text, modelControls.selection);
       return id;
     },
     onSuccess: (id) => {
@@ -119,14 +137,14 @@ export function ChatPage() {
     },
   });
 
-  const blocked = me.quota.remaining_today <= 0 ? "今天的提问次数已用完，请明天再来。"
+  const blocked = me.quota.chat_remaining_today <= 0 ? "今天的研究对话额度已用完。预留额度仍可用于测评。"
     : me.quota.site_remaining_today <= 0 ? "今日全站提问次数已用完，请明天再来。"
     : running || me.running_job_id ? "正在分析，完成后可以继续提问。" : null;
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
     const text = question.trim();
-    if (text && !blocked && !ask.isPending) ask.mutate(text);
+    if (text && modelControls.selection && !blocked && !ask.isPending) ask.mutate(text);
   }
 
   function onKey(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -136,9 +154,9 @@ export function ChatPage() {
   const empty = !sessionId;
   return (
     <div className="chat-workspace">
-      <header className="workspace-header"><h1>{session.data?.title ?? "研究对话"}</h1><DataInfo status={status.data} error={status.isError} /></header>
+      <header className="workspace-header"><h1>{session.data?.title ?? "研究对话"}</h1><div className="workspace-tools"><Link className="guide-text-link" to={sessionId ? `/guide?session=${encodeURIComponent(sessionId)}` : "/guide"}>研究范例</Link><DataInfo status={status.data} error={status.isError} /></div></header>
       <div className={`chat-stage ${empty ? "is-empty" : ""}`}>
-        {empty ? <div className="chat-welcome"><h2>今天想研究什么？</h2></div> : (
+        {empty ? <div className="chat-welcome"><h2>今天想研究什么？</h2><p className="chat-guide-entry">第一次使用？<Link to="/guide">跟着范例，完成第一次研究<Icon name="right" size={16} /></Link></p></div> : (
           <div ref={scroller} className="conversation-scroll">
             <div className="conversation-content">
               {session.isPending ? <Spinner label="正在加载对话" /> : session.error ? <Notice>{errorText(session.error)}</Notice> : turns.length ? turns.map((turn) => <TurnView key={turn.id} turn={turn} />) : <div className="empty-session">开始一个新问题</div>}
@@ -150,7 +168,7 @@ export function ChatPage() {
           <form onSubmit={submit} className="question-composer">
             <label htmlFor="question" className="sr-only">输入研究问题</label>
             <textarea ref={input} id="question" rows={2} maxLength={4000} value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={onKey} placeholder="向历史数据提问…" />
-            <div className="composer-toolbar"><button type="submit" aria-label="发送问题" disabled={!question.trim() || !!blocked || ask.isPending}><Icon name="arrow" size={20} /></button></div>
+            <div className="composer-toolbar"><ModelPicker controls={modelControls} disabled={ask.isPending} /><button type="submit" aria-label="发送问题" disabled={!modelControls.selection || !question.trim() || !!blocked || ask.isPending}><Icon name="arrow" size={20} /></button></div>
           </form>
           {empty && <div className="question-suggestions" aria-label="试试这些问题">{SUGGESTIONS.map((suggestion) => <button key={suggestion.title} type="button" onClick={() => { setQuestion(suggestion.text); input.current?.focus(); }}>{suggestion.title}<Icon name="right" size={15} /></button>)}</div>}
         </div>

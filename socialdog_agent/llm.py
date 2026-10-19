@@ -51,7 +51,7 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high")
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "max")
 
 
 class ResponsesAPILLM(ResponsesLLM):

@@ -1,7 +1,10 @@
 import type {
-  AdminUser, DataStatus, EvalAttempt, EvalQuestion, InviteInfo, InviteLink, Job, Me, NewUser, Rating,
+  AdminUser, DataStatus, EvalAttempt, InviteInfo, InviteLink, Job, Me, NewUser, Rating,
   RatingInput, ReferenceMeta, ReferenceQuery, ReferenceResult, Session, SessionDetail, SiteSettings,
   SubmitResponse, UsageReport, UserPatch,
+  Assignment, AssignmentProgress, BankVersion, FeedbackInput, FeedbackIssue, IdeaInput, IdeaStatus, ResearchIdea,
+  ResearcherSummary, ReviewStatus, VersionedQuestion,
+  ModelCatalog, ModelSelection,
 } from "./types";
 
 export class ApiError extends Error {
@@ -57,6 +60,7 @@ function query(params: Record<string, string | null | undefined>) {
 
 export const api = {
   me: () => request<Me>("GET", "/api/me"),
+  acceptNotice: () => request<Me>("POST", "/api/notice/accept"),
   login: (username: string, password: string) => request<Me>("POST", "/api/auth/login", { username, password }),
   logout: () => request<void>("POST", "/api/auth/logout"),
   invite: (token: string) => request<InviteInfo>("GET", `/api/auth/invite/${encodeURIComponent(token)}`),
@@ -64,11 +68,12 @@ export const api = {
     request<Me>("POST", "/api/auth/invite/accept", { token, password }),
 
   status: () => request<DataStatus>("GET", "/api/status"),
+  models: () => request<ModelCatalog>("GET", "/api/models"),
   sessions: () => request<Session[]>("GET", "/api/sessions"),
   createSession: () => request<Session>("POST", "/api/sessions"),
   session: (id: string) => request<SessionDetail>("GET", `/api/sessions/${id}`),
-  ask: (sessionId: string, question: string) =>
-    request<SubmitResponse>("POST", `/api/sessions/${sessionId}/messages`, { question }),
+  ask: (sessionId: string, question: string, selection?: ModelSelection) =>
+    request<SubmitResponse>("POST", `/api/sessions/${sessionId}/messages`, { question, ...selection }),
   job: (id: string) => request<Job>("GET", `/api/jobs/${id}`),
 
   referenceMeta: () => request<ReferenceMeta>("GET", "/api/reference/meta"),
@@ -76,9 +81,10 @@ export const api = {
     scope: q.scope, by: q.by, start_date: q.start_date, end_date: q.end_date, product: q.product,
   })),
 
-  evalQuestions: () => request<EvalQuestion[]>("GET", "/api/eval/questions"),
-  runEval: (questionId: string, ownAnswer: string) =>
-    request<EvalAttempt>("POST", `/api/eval/questions/${questionId}/run`, { own_answer: ownAnswer }),
+  evalQuestions: () => request<VersionedQuestion[]>("GET", "/api/eval/questions"),
+  runEval: (questionId: string, ownAnswer: string, bank_version_id?: string, assignment_id?: string, selection?: ModelSelection) =>
+    request<EvalAttempt>("POST", `/api/eval/questions/${questionId}/run`, { own_answer: ownAnswer, bank_version_id, assignment_id, ...selection }),
+  myAttempts: () => request<EvalAttempt[]>("GET", "/api/eval/attempts"),
   attempt: (id: string) => request<EvalAttempt>("GET", `/api/eval/attempts/${id}`),
   rate: (input: RatingInput) => request<Rating>("POST", "/api/ratings", input),
   myRatings: () => request<Rating[]>("GET", "/api/ratings/mine"),
@@ -91,6 +97,21 @@ export const api = {
   allRatings: () => request<Rating[]>("GET", "/api/admin/ratings"),
   settings: () => request<SiteSettings>("GET", "/api/admin/settings"),
   saveSettings: (settings: SiteSettings) => request<SiteSettings>("PUT", "/api/admin/settings", settings),
+  feedback: (input: FeedbackInput) => request<FeedbackIssue>("POST", "/api/feedback", input),
+  myFeedback: () => request<FeedbackIssue[]>("GET", "/api/feedback/mine"),
+  feedbackQueue: (filters: Record<string, string>) => request<FeedbackIssue[]>("GET", "/api/admin/feedback" + query(filters)),
+  reviewIssue: (id: string, review_status: ReviewStatus, review_note: string) => request<FeedbackIssue>("PATCH", `/api/admin/feedback/${id}`, { review_status, review_note }),
+  createIdea: (idea: IdeaInput) => request<ResearchIdea>("POST", "/api/ideas", idea),
+  myIdeas: () => request<ResearchIdea[]>("GET", "/api/ideas/mine"),
+  allIdeas: () => request<ResearchIdea[]>("GET", "/api/admin/ideas"),
+  reviewIdea: (id: string, status: IdeaStatus, reviewer_feedback: string) => request<ResearchIdea>("PATCH", `/api/admin/ideas/${id}`, { status, reviewer_feedback }),
+  myAssignments: () => request<Assignment[]>("GET", "/api/assignments/mine"),
+  assignments: () => request<Assignment[]>("GET", "/api/admin/assignments"),
+  assign: (input: { user_id: string; question_id: string; bank_version_id: string; due_at: string | null }) => request<Assignment>("POST", "/api/admin/assignments", input),
+  progress: () => request<AssignmentProgress[]>("GET", "/api/admin/progress"),
+  bankVersions: () => request<BankVersion[]>("GET", "/api/admin/question-bank/versions"),
+  researcher: (id: string) => request<ResearcherSummary>("GET", `/api/admin/researchers/${id}`),
+  inspectSession: (userId: string, sessionId: string) => request<SessionDetail>("GET", `/api/admin/researchers/${userId}/sessions/${sessionId}`),
 };
 
 export const RATINGS_EXPORT_URL = "/api/admin/ratings/export.csv";

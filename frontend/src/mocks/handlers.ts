@@ -1,8 +1,8 @@
 // MSW handlers implementing docs/接口约定.md against the in-browser mock state.
 import { http, HttpResponse, type DefaultBodyType, type StrictRequest } from "msw";
 import type {
-  AdminUser, EvalAttempt, Me, NewUser, Rating, RatingInput, ReferenceGroup, ReferenceQuery, ReferenceScope,
-  SiteSettings, UserPatch,
+  AdminUser, EvalAttempt, FeedbackInput, FeedbackIssue, IdeaInput, IdeaStatus, Me, NewUser, Rating, RatingInput, ReferenceGroup, ReferenceQuery, ReferenceScope,
+  ModelSelection, ReviewStatus, SiteSettings, UserPatch,
 } from "../api/types";
 import { AGENT_LINES, CUTOFF, DATASET_VERSION, END, GROUP_LABELS, LINES, START, aggregate } from "./data";
 import {
@@ -15,9 +15,10 @@ function me(user: UserRecord): Me {
   const used = usedToday(user.id);
   const siteUsed = db.usage.filter((u) => u.date === today()).length;
   return {
-    id: user.id, username: user.username, display_name: user.display_name, role: user.role, csrf_token: db.csrf,
+    id: user.id, username: user.username, display_name: user.display_name, role: user.role, csrf_token: db.csrf, notice_version: user.notice_version,
     quota: { daily_limit: user.daily_limit, used_today: used, remaining_today: Math.max(0, user.daily_limit - used),
-             site_remaining_today: Math.max(0, db.settings.site_daily_limit - siteUsed) },
+             site_remaining_today: Math.max(0, db.settings.site_daily_limit - siteUsed), evaluation_reserve: user.evaluation_reserve,
+             chat_remaining_today: Math.max(0, user.daily_limit - user.evaluation_reserve - used) },
     running_job_id: runningJob(user.id)?.id ?? null,
   };
 }
@@ -72,7 +73,105 @@ function usageLine(records: typeof db.usage) {
   return { questions: records.length, input_tokens: input, output_tokens: output, cost_yuan: cost(input, output) };
 }
 
+function mockIssue(user: UserRecord, input: FeedbackInput): FeedbackIssue | Response {
+  const turn = db.turns.find(t => t.id === input.turn_id);
+  const job = db.jobs.find(j => j.turn_id === turn?.id && j.user_id === user.id);
+  if (!turn?.result || !job) return fail(404, "未找到该回答。");
+  if (!input.description.trim()) return fail(400, "请描述问题。");
+  if (input.evidence_refs.some(ref => !turn.result!.evidence.some(e => e.call_id === ref))) return fail(400, "关联依据不属于该回答。");
+  return { ...input, id: id(), user_id: user.id, display_name: user.display_name, question: turn.question, model_answer: turn.result.answer, evidence_snapshot: structuredClone(turn.result.evidence), review_status: "pending", review_note: "", reviewed_by: null, reviewed_at: null, created_at: now() };
+}
+
+const assignmentView = (a: typeof db.assignments[number]) => ({ ...a, overdue: !a.completed && !!a.due_at && a.due_at < today() });
+
 export const handlers = [
+  http.get("/api/models", ({ request }) => {
+    const user = auth(request); return user instanceof Response ? user : HttpResponse.json({ models: [{ id: "deepseek-flash", label: "DeepSeek Flash", reasoning_efforts: ["none", "low", "high", "max"] }, { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", reasoning_efforts: ["none", "low", "high", "max"] }], default_model: "deepseek-flash", default_reasoning_effort: "high" });
+  }),
+  http.post("/api/notice/accept", ({ request }) => {
+    const user = auth(request);
+    if (user instanceof Response) return user;
+    user.notice_version = 1; save(); return HttpResponse.json(me(user));
+  }),
+  http.get("/api/assignments/mine", ({ request }) => {
+    const user = auth(request); return user instanceof Response ? user : HttpResponse.json(db.assignments.filter(a => a.user_id === user.id).map(assignmentView));
+  }),
+  http.get("/api/eval/attempts", ({ request }) => {
+    const user = auth(request); return user instanceof Response ? user : HttpResponse.json(db.attempts.filter(a => a.user_id === user.id).map(attemptView));
+  }),
+  http.post("/api/feedback", async ({ request }) => {
+    const user = auth(request); if (user instanceof Response) return user;
+    const issue = mockIssue(user, await request.json() as FeedbackInput);
+    if (issue instanceof Response) return issue;
+    db.feedback.push(issue); save(); return HttpResponse.json(issue, { status: 201 });
+  }),
+  http.get("/api/feedback/mine", ({ request }) => {
+    const user = auth(request); return user instanceof Response ? user : HttpResponse.json(db.feedback.filter(i => i.user_id === user.id));
+  }),
+  http.get("/api/admin/feedback", ({ request }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    const filters = new URL(request.url).searchParams;
+    return HttpResponse.json(db.feedback.filter(i => ["source", "stage", "user_id", "review_status"].every(key => !filters.get(key) || filters.get(key) === i[key as keyof FeedbackIssue])));
+  }),
+  http.patch("/api/admin/feedback/:id", async ({ request, params }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    const issue = db.feedback.find(i => i.id === params.id); if (!issue) return fail(404, "未找到问题反馈。");
+    const body = await request.json() as { review_status: ReviewStatus; review_note: string };
+    Object.assign(issue, body, { reviewed_by: user.id, reviewed_at: now() }); save(); return HttpResponse.json(issue);
+  }),
+  http.get("/api/admin/improvements/export.json", ({ request }) => {
+    const user = auth(request, "admin"); return user instanceof Response ? user : HttpResponse.json(db.feedback.filter(i => i.review_status === "confirmed"), { headers: { "Content-Disposition": 'attachment; filename="model-improvements.json"' } });
+  }),
+  http.post("/api/ideas", async ({ request }) => {
+    const user = auth(request); if (user instanceof Response) return user;
+    const body = await request.json() as IdeaInput;
+    if (body.linked_conversations.some(id => !db.sessions.some(s => s.id === id && s.user_id === user.id))) return fail(404, "未找到该对话。");
+    const idea = { ...body, id: id(), user_id: user.id, display_name: user.display_name, status: "pending" as const, reviewer_feedback: "", reviewed_by: null, created_at: now(), updated_at: now() };
+    db.ideas.push(idea); save(); return HttpResponse.json(idea, { status: 201 });
+  }),
+  http.get("/api/ideas/mine", ({ request }) => {
+    const user = auth(request); return user instanceof Response ? user : HttpResponse.json(db.ideas.filter(i => i.user_id === user.id));
+  }),
+  http.get("/api/admin/ideas", ({ request }) => {
+    const user = auth(request, "admin"); return user instanceof Response ? user : HttpResponse.json(db.ideas);
+  }),
+  http.patch("/api/admin/ideas/:id", async ({ request, params }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    const idea = db.ideas.find(i => i.id === params.id); if (!idea) return fail(404, "未找到研究想法。");
+    const body = await request.json() as { status: IdeaStatus; reviewer_feedback: string };
+    Object.assign(idea, body, { reviewed_by: user.id, updated_at: now() }); save(); return HttpResponse.json(idea);
+  }),
+  http.get("/api/admin/assignments", ({ request }) => {
+    const user = auth(request, "admin"); return user instanceof Response ? user : HttpResponse.json(db.assignments.map(assignmentView));
+  }),
+  http.post("/api/admin/assignments", async ({ request }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    const body = await request.json() as { user_id: string; question_id: string; bank_version_id: string; due_at: string | null };
+    const question = QUESTIONS.find(q => q.id === body.question_id); const owner = db.users.find(u => u.id === body.user_id && u.role === "researcher");
+    if (!question || !owner) return fail(404, "请选择研究员和题目。");
+    if (db.assignments.some(a => a.user_id === body.user_id && a.question_id === body.question_id)) return fail(409, "已分配该题目。");
+    const a = { ...body, id: id(), display_name: owner.display_name, assigned_by: user.id, created_at: now(), attempt_id: null, completed: false, overdue: false, question: { ...question, bank_version_id: "demo-bank" } };
+    db.assignments.push(a); save(); return HttpResponse.json(assignmentView(a), { status: 201 });
+  }),
+  http.get("/api/admin/progress", ({ request }) => {
+    const user = auth(request, "admin"); if (user instanceof Response) return user;
+    return HttpResponse.json(db.users.filter(u => u.role === "researcher").map(u => ({ user_id: u.id, display_name: u.display_name, assigned: db.assignments.filter(a => a.user_id === u.id).length, completed: db.assignments.filter(a => a.user_id === u.id && a.completed).length, overdue: db.assignments.filter(a => a.user_id === u.id && assignmentView(a).overdue).length })));
+  }),
+  http.get("/api/admin/question-bank/versions", ({ request }) => {
+    const user = auth(request, "admin"); return user instanceof Response ? user : HttpResponse.json([{ id: "demo-bank", cutoff_T: CUTOFF, threshold_N: db.settings.min_orders_per_group, dataset_version: DATASET_VERSION, legacy: false, created_at: now(), question_count: QUESTIONS.length }]);
+  }),
+  http.get("/api/admin/researchers/:id", ({ request, params }) => {
+    const admin = auth(request, "admin"); if (admin instanceof Response) return admin;
+    const user = db.users.find(u => u.id === params.id); if (!user) return fail(404, "未找到成员。");
+    const issues = db.feedback.filter(i => i.user_id === user.id); const confirmed = issues.filter(i => i.review_status === "confirmed").length; const reviewed = issues.filter(i => ["confirmed", "rejected"].includes(i.review_status)).length;
+    const jobs = db.jobs.filter(j => j.user_id === user.id && j.session_id !== "eval");
+    return HttpResponse.json({ user: adminView(user), quota: me(user).quota, question_count: jobs.length, recent_questions: jobs.map(j => ({ id: j.turn_id, question: j.question, session_id: j.session_id, created_at: now() })).reverse().slice(0, 20), ratings: db.ratings.filter(r => r.user_id === user.id), feedback_count: issues.length, confirmed_count: confirmed, reviewed_count: reviewed, confirmed_ratio: reviewed ? confirmed / reviewed : null, ideas: db.ideas.filter(i => i.user_id === user.id), assignments: db.assignments.filter(a => a.user_id === user.id).map(assignmentView) });
+  }),
+  http.get("/api/admin/researchers/:userId/sessions/:sessionId", ({ request, params }) => {
+    const admin = auth(request, "admin"); if (admin instanceof Response) return admin;
+    const owner = db.users.find(u => u.id === params.userId); if (!owner?.notice_version) return fail(403, "该成员尚未确认使用须知。");
+    const session = db.sessions.find(s => s.id === params.sessionId && s.user_id === params.userId); return session ? HttpResponse.json({ ...session, turns: db.turns.filter(t => t.session_id === session.id) }) : fail(404, "未找到对话。");
+  }),
   http.get("/api/me", () => {
     const user = db.users.find((u) => u.id === db.current_user_id && !u.disabled);
     return user ? HttpResponse.json(me(user)) : fail(401, "请先登录。");
@@ -145,13 +244,13 @@ export const handlers = [
     if (user instanceof Response) return user;
     const session = db.sessions.find((s) => s.id === params.id && s.user_id === user.id);
     if (!session) return fail(404, "未找到该会话。");
-    const { question } = (await request.json()) as { question: string };
+    const { question, ...selection } = (await request.json()) as { question: string } & ModelSelection;
     if (!question?.trim() || question.length > 4000) return fail(400, "问题不能为空，且最多 4000 字。");
     const blocked = checkQuota(user);
     if (blocked) return blocked;
     if (session.title === "新的研究") session.title = question.trim().slice(0, 28);
     session.updated_at = now();
-    const { turn, job } = startJob(user.id, session.id, question.trim());
+    const { turn, job } = startJob(user.id, session.id, question.trim(), selection);
     const { session_id: _s, ...publicTurn } = turn as typeof turn & { session_id: string };
     return HttpResponse.json({ turn: publicTurn, job }, { status: 202 });
   }),
@@ -187,21 +286,22 @@ export const handlers = [
 
   http.get("/api/eval/questions", ({ request }) => {
     const user = auth(request);
-    return user instanceof Response ? user : HttpResponse.json(QUESTIONS);
+    return user instanceof Response ? user : HttpResponse.json(QUESTIONS.map(q => ({ ...q, bank_version_id: "demo-bank" })));
   }),
   http.post("/api/eval/questions/:id/run", async ({ request, params }) => {
     const user = auth(request);
     if (user instanceof Response) return user;
     const question = QUESTIONS.find((q) => q.id === params.id);
     if (!question) return fail(404, "未找到该题目。");
-    const { own_answer } = (await request.json()) as { own_answer: string };
+    const { own_answer, model, reasoning_effort } = (await request.json()) as { own_answer: string } & ModelSelection;
     if (!own_answer?.trim()) return fail(400, "请先写下你自己的答案，再揭晓 agent 的回答。");
     const blocked = checkQuota(user);
     if (blocked) return blocked;
-    const { turn, job } = startJob(user.id, "eval", question.question);
+    const { turn, job } = startJob(user.id, "eval", question.question, { model, reasoning_effort });
     const attempt = { id: id(), question_id: question.id, own_answer: own_answer.trim(), job_id: job.id,
-                      user_id: user.id, turn_id: turn.id };
+                      user_id: user.id, turn_id: turn.id, bank_version_id: "demo-bank", question_snapshot: { ...question } };
     db.attempts.push(attempt);
+    for (const a of db.assignments.filter(a => a.user_id === user.id && a.question_id === question.id && !a.completed)) Object.assign(a, { completed: true, attempt_id: attempt.id });
     save();
     return HttpResponse.json(attemptView(attempt), { status: 202 });
   }),
@@ -228,6 +328,10 @@ export const handlers = [
       own_answer: attempt.own_answer, agent_answer: view.turn.result?.answer ?? view.turn.error ?? "", scores: input.scores,
       note: input.note ?? "", created_at: now(), username: user.username, user_id: user.id,
     };
+    const issues = (input.issues ?? []).map(draft => mockIssue(user, { ...draft, source: "evaluation", turn_id: view.turn.id, attempt_id: attempt.id }));
+    const invalid = issues.find(i => i instanceof Response);
+    if (invalid instanceof Response) return invalid;
+    db.feedback.push(...issues as FeedbackIssue[]);
     db.ratings.push(rating);
     save();
     const { user_id: _u, ...result } = rating;
@@ -250,7 +354,7 @@ export const handlers = [
     if (!/^[a-z0-9_]{2,32}$/.test(input.username)) return fail(400, "用户名只能用 2–32 位小写字母、数字或下划线。");
     if (db.users.some((u) => u.username === input.username)) return fail(409, "用户名已存在。");
     if (db.users.length >= 10) return fail(409, "已达到 10 个账号上限。");
-    const user: UserRecord = { id: id(), ...input, disabled: false, last_active_at: null, invite_pending: true,
+    const user: UserRecord = { id: id(), ...input, evaluation_reserve: input.evaluation_reserve ?? 0, notice_version: 0, disabled: false, last_active_at: null, invite_pending: true,
                                password: null, invite_token: null, invite_expires_at: null };
     db.users.push(user);
     const link = inviteLink(user);
@@ -318,6 +422,7 @@ export const handlers = [
     if (admin instanceof Response) return admin;
     const input = (await request.json()) as SiteSettings;
     if (input.allow_post_cutoff_reference_after_submit !== false) return fail(400, "提交后开放截止日后数据尚未启用。");
+    if (input.anonymous_ab_evaluation !== false) return fail(400, "匿名评分尚未启用。");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.cutoff_date)) return fail(400, "截断日期格式应为 YYYY-MM-DD。");
     if (input.min_orders_per_group < 1 || input.max_concurrent_jobs < 1 || input.site_daily_limit < 0) {
       return fail(400, "门槛、并发和上限须为正数。");

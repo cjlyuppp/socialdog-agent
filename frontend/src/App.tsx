@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { onSessionExpired } from "./api/client";
@@ -6,12 +6,15 @@ import { Layout } from "./components/Layout";
 import { Notice, Spinner } from "./components/ui";
 import { ME_KEY, useMe } from "./lib/auth";
 import { errorText } from "./lib/format";
-import { AdminPage } from "./pages/AdminPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EvaluatePage } from "./pages/EvaluatePage";
+import { GuidePage } from "./pages/GuidePage";
 import { InvitePage, LoginPage } from "./pages/AuthPages";
 import { RatingsPage } from "./pages/RatingsPage";
 import { ReferencePage } from "./pages/ReferencePage";
+import { HomePage, MinePage, NoticePage, TodoPage } from "./pages/ResearchPages";
+const AdminPage = lazy(() => import("./pages/AdminPage").then(module => ({ default: module.AdminPage })));
+const ResearcherPage = lazy(() => import("./pages/ReviewPages").then(module => ({ default: module.ResearcherPage })));
 
 export default function App() {
   const client = useQueryClient();
@@ -26,13 +29,18 @@ export default function App() {
 
   if (isPending) return <Spinner label="正在检查登录状态" />;
   if (error) return <div className="mx-auto max-w-md p-8"><Notice>{errorText(error)}</Notice></div>;
+  if (me && me.notice_version < 1 && !location.pathname.startsWith("/invite/")) return <NoticePage />;
 
   return (
-    <Routes>
-      <Route path="/login" element={me ? <Navigate to={from && from !== "/login" ? from : "/chat"} replace /> : <LoginPage />} />
+    <Suspense fallback={<Spinner />}><Routes>
+      <Route path="/login" element={me ? <Navigate to={from && from !== "/login" ? from : "/home"} replace /> : <LoginPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
       {me ? (
         <Route element={<Layout me={me} />}>
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/guide" element={<GuidePage />} />
+          <Route path="/todo" element={<TodoPage />} />
+          <Route path="/mine" element={<MinePage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:sessionId" element={<ChatPage />} />
           <Route path="/reference" element={<ReferencePage />} />
@@ -40,11 +48,12 @@ export default function App() {
           <Route path="/evaluate/:attemptId" element={<EvaluatePage />} />
           <Route path="/ratings" element={<RatingsPage />} />
           <Route path="/admin" element={me.role === "admin" ? <AdminPage /> : <Navigate to="/chat" replace />} />
-          <Route path="*" element={<Navigate to="/chat" replace />} />
+          <Route path="/admin/researchers/:userId" element={me.role === "admin" ? <ResearcherPage /> : <Navigate to="/chat" replace />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
         </Route>
       ) : (
         <Route path="*" element={<Navigate to="/login" replace state={{ from: location.pathname }} />} />
       )}
-    </Routes>
+    </Routes></Suspense>
   );
 }

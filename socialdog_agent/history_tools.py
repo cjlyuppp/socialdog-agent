@@ -140,7 +140,10 @@ def build_history_tools(package: Path, state: Path = research.DEFAULT_STATE,
         return result
 
     def describe(_):
-        return {**description, "privacy": {"minimum_orders_per_group": min_orders},
+        # Truncation counts describe hidden future data. They belong in the
+        # offline manifest, not in model context or participant evidence.
+        public = {key: value for key, value in description.items() if key != "source_rows_removed_after_as_of"}
+        return {**public, "privacy": {"minimum_orders_per_group": min_orders},
                 "public_query_groups": list(history.GROUPS),
                 "metric_mapping": "与网页飞书口径的字段对照见仓库 docs/口径对照.md；两套口径不能直接对比金额。"}
 

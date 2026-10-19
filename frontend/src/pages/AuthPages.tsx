@@ -73,7 +73,7 @@ export function InvitePage() {
     setError("");
     try {
       signedIn(await api.acceptInvite(token, password));
-      navigate("/chat", { replace: true });
+      navigate("/home", { replace: true });
     } catch (caught) {
       setError(errorText(caught));
     } finally {

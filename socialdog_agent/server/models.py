@@ -27,12 +27,22 @@ class AcceptInvite(Input):
     password: Annotated[str, Field(min_length=10, max_length=256)]
 
 
-class QuestionInput(Input):
+ReasoningEffort = Literal["none", "low", "high", "max"]
+
+
+class ModelSelection(Input):
+    model: Annotated[str, Field(max_length=80)] | None = None
+    reasoning_effort: ReasoningEffort | None = None
+
+
+class QuestionInput(ModelSelection):
     question: Text
 
 
-class OwnAnswer(Input):
+class OwnAnswer(ModelSelection):
     own_answer: Text
+    bank_version_id: str | None = None
+    assignment_id: str | None = None
 
 
 class NewUser(Input):
@@ -40,11 +50,13 @@ class NewUser(Input):
     display_name: Annotated[str, Field(min_length=1, max_length=60)]
     role: Role = "researcher"
     daily_limit: Limit = 30
+    evaluation_reserve: Limit = 0
 
 
 class UserPatch(Input):
     role: Role | None = None
     daily_limit: Limit | None = None
+    evaluation_reserve: Limit | None = None
     disabled: bool | None = Field(default=None, strict=True)
 
     @model_validator(mode="after")
@@ -63,6 +75,7 @@ class SiteSettings(Input):
     max_concurrent_jobs: Annotated[int, Field(strict=True, ge=1, le=10)] = 3
     per_user_concurrent_jobs: Literal[1] = 1
     allow_post_cutoff_reference_after_submit: Literal[False] = False
+    anonymous_ab_evaluation: Literal[False] = False
 
 
 class Quota(BaseModel):
@@ -70,6 +83,8 @@ class Quota(BaseModel):
     used_today: int
     remaining_today: int
     site_remaining_today: int
+    evaluation_reserve: int
+    chat_remaining_today: int
 
 
 class Me(BaseModel):
@@ -80,6 +95,7 @@ class Me(BaseModel):
     csrf_token: str
     quota: Quota
     running_job_id: str | None
+    notice_version: int
 
 
 class AdminUser(BaseModel):
@@ -88,6 +104,7 @@ class AdminUser(BaseModel):
     display_name: str
     role: Role
     daily_limit: int
+    evaluation_reserve: int
     disabled: bool
     used_today: int
     last_active_at: str | None
@@ -116,6 +133,18 @@ class DataStatus(BaseModel):
     agent_observation_end: str
     min_orders_per_group: int
     model: str
+
+
+class ModelOption(BaseModel):
+    id: str
+    label: str
+    reasoning_efforts: list[ReasoningEffort]
+
+
+class ModelCatalog(BaseModel):
+    models: list[ModelOption]
+    default_model: str
+    default_reasoning_effort: ReasoningEffort
 
 
 class Session(BaseModel):
@@ -151,6 +180,7 @@ class AgentResult(BaseModel):
     model: str
     request_id: str
     usage: Usage
+    reasoning_effort: str | None = None
 
 
 class Turn(BaseModel):
@@ -248,6 +278,10 @@ class EvalQuestion(Input):
     reference_hint: ReferenceHint | None = None
 
 
+class VersionedQuestion(EvalQuestion):
+    bank_version_id: str
+
+
 class RatingScores(Input):
     numbers: Literal["correct", "partial", "wrong", "not_applicable"]
     reasoning: Annotated[int, Field(strict=True, ge=1, le=5)]
@@ -255,10 +289,133 @@ class RatingScores(Input):
     limitations: Annotated[int, Field(strict=True, ge=1, le=5)]
 
 
+Stage = Literal["retrieval", "definition", "calculation", "reasoning", "conclusion", "other"]
+ReviewStatus = Literal["pending", "confirmed", "rejected", "discuss"]
+IdeaStatus = Literal["pending", "feedback_given", "invited", "not_suitable"]
+
+
+class IssueDraft(Input):
+    stage: Stage
+    description: Text
+    correct_approach: Annotated[str, Field(max_length=4000)] = ""
+    evidence_refs: list[Annotated[str, Field(max_length=160)]] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def meaningful_description(self):
+        if not self.description.strip():
+            raise ValueError("请描述问题")
+        return self
+
+
+class FeedbackInput(IssueDraft):
+    source: Literal["chat", "evaluation"]
+    turn_id: str
+    attempt_id: str | None = None
+
+
+class FeedbackIssue(IssueDraft):
+    id: str
+    user_id: str
+    display_name: str
+    source: Literal["chat", "evaluation"]
+    turn_id: str
+    attempt_id: str | None
+    question: str
+    model_answer: str
+    evidence_snapshot: list[Evidence]
+    review_status: ReviewStatus
+    review_note: str
+    reviewed_by: str | None
+    reviewed_at: str | None
+    created_at: str
+
+
+class IssueReview(Input):
+    review_status: ReviewStatus
+    review_note: Annotated[str, Field(max_length=4000)] = ""
+
+
+class IdeaInput(Input):
+    question: Text
+    data_used: Text
+    findings: Text
+    next_steps: Text
+    linked_conversations: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def meaningful_fields(self):
+        if any(not getattr(self, k).strip() for k in ("question", "data_used", "findings", "next_steps")):
+            raise ValueError("请填写研究想法")
+        return self
+
+
+class ResearchIdea(IdeaInput):
+    id: str
+    user_id: str
+    display_name: str
+    status: IdeaStatus
+    reviewer_feedback: str
+    reviewed_by: str | None
+    created_at: str
+    updated_at: str
+
+
+class IdeaReview(Input):
+    status: IdeaStatus
+    reviewer_feedback: Annotated[str, Field(max_length=4000)] = ""
+
+
+class AssignmentInput(Input):
+    question_id: str
+    bank_version_id: str
+    user_id: str
+    due_at: Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")] | None = None
+
+    @model_validator(mode="after")
+    def valid_due_date(self):
+        if self.due_at:
+            date.fromisoformat(self.due_at)
+        return self
+
+
+class Assignment(BaseModel):
+    id: str
+    question_id: str
+    bank_version_id: str
+    user_id: str
+    display_name: str
+    assigned_by: str
+    due_at: str | None
+    created_at: str
+    attempt_id: str | None
+    completed: bool
+    overdue: bool
+    question: VersionedQuestion
+
+
+class AssignmentProgress(BaseModel):
+    user_id: str
+    display_name: str
+    assigned: int
+    completed: int
+    overdue: int
+
+
+class BankVersion(BaseModel):
+    id: str
+    cutoff_T: str | None
+    threshold_N: int | None
+    dataset_version: str | None
+    legacy: bool
+    created_at: str
+    question_count: int
+
+
 class RatingInput(Input):
     attempt_id: str
     scores: RatingScores
     note: Annotated[str, Field(max_length=4000)] = ""
+    issues: list[IssueDraft] = Field(default_factory=list, max_length=20)
 
 
 class Rating(BaseModel):
@@ -282,6 +439,8 @@ class EvalAttempt(BaseModel):
     job_id: str
     turn: Turn
     rated: bool
+    bank_version_id: str | None
+    question_snapshot: dict[str, Any] | None
 
 
 class UsageLine(Usage):
@@ -304,3 +463,17 @@ class UsageReport(BaseModel):
     total: UsageLine
     by_user: list[UserUsage]
     by_day: list[DayUsage]
+
+
+class ResearcherSummary(BaseModel):
+    user: AdminUser
+    quota: Quota
+    question_count: int
+    recent_questions: list[dict[str, str]]
+    ratings: list[Rating]
+    feedback_count: int
+    confirmed_count: int
+    reviewed_count: int
+    confirmed_ratio: float | None
+    ideas: list[ResearchIdea]
+    assignments: list[Assignment]

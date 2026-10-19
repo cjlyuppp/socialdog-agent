@@ -13,6 +13,7 @@
 - 自动评测：`eval_runner.py` 把 golden 用例交给真实 DeepSeek agent 回答，自动比对工具参数、工具结果和回答中的数字，只把推理、口径和局限性留给人工评审。
 - 回答生成后自动核对数字：回答里的每个数字都必须能在本轮工具结果中找到；找不到时要求模型改写一次，仍找不到就在回答旁标出。
 - 保存会话、显示执行进度、查看本轮工具参数和结果。
+- 邀请制研究工作台：独立作答与测评、结构化问题反馈、研究想法、管理员派题/复核/按人汇总、测评额度预留和题库版本锁定。部署及角色规则见 [多人工作台部署](docs/多人工作台部署.md)。
 - 读取官方飞书导出的本地核验版本，每题锁定一个只读快照。
 
 储值、留存、实验分析、回归、图表及完整研究报告仍受数据或实现限制。调价前后对比是描述性的，不是价格弹性；没有成本数据，利润不可计算。模型不能用文字补造不存在的分析结果。飞书入口读取已导出的本地文件，不是实时飞书 API。
@@ -69,7 +70,7 @@ python eval_runner.py --package outputs/history_full --only P01,P02 --repeat 3 -
 
 ## 模型配置
 
-`.env` 中的 `DEEPSEEK_REASONING_EFFORT` 控制推理强度（none/minimal/low/medium/high），默认 `low`。核心提示词只保留 8 条通用原则；与数据集相关的口径说明放在各数据源的工具说明和工具结果中。日数、日均、占比、变化率等派生数字由工具计算。
+`.env` 中的 `DEEPSEEK_REASONING_EFFORT` 控制默认思考强度（none/low/high/max），默认 `low`；旧的minimal/medium分别对应low/high。多人工作台可在提问或独立作答时选择 Flash/V4 Pro 及思考强度，实际配置随任务保存。核心提示词只保留 8 条通用原则；与数据集相关的口径说明放在各数据源的工具说明和工具结果中。日数、日均、占比、变化率等派生数字由工具计算。
 
 ## 数据与研究口径
 
@@ -85,12 +86,12 @@ python eval_runner.py --package outputs/history_full --only P01,P02 --repeat 3 -
 以下测试使用人工构造的数据，不需要API Key，也不会调用外部模型：
 
 ```sh
-python -m unittest test_chat_agent test_research_assistant test_feishu_agent_source test_feishu_daily_clean test_factor_inspection test_web_agent test_historical_backtest test_history_agent test_api_server -v
+python -m unittest test_chat_agent test_research_assistant test_feishu_agent_source test_feishu_daily_clean test_factor_inspection test_web_agent test_historical_backtest test_history_agent test_api_server test_research_workspace -v
 ```
 
 ## 多人研究工作台
 
-`frontend/` 包含登录/邀请、研究对话、数据核对、测评、我的测评和管理后台。FastAPI 后端使用 SQLite 保存账号、会话、任务、评分及每次模型调用的用量。每位成员同时最多一个任务，提问和测评在调用模型前原子预占每日配额。
+`frontend/` 包含登录/邀请、待办、研究对话、数据核对、测评、研究想法和管理后台。FastAPI 后端使用 SQLite 保存账号、会话、任务、反馈、想法、派题、题库版本、评分及逐次模型用量。每位成员同时最多一个任务，提问和测评在调用模型前原子预占每日配额。
 
 安装后提供 `socialdog-api`、`socialdog-chat`、`socialdog-web`、`socialdog-history`、`socialdog-eval` 命令；也可继续使用对应的 `.py` 入口。后端建议使用 Python 3.12。
 

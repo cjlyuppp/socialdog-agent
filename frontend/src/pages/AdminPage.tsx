@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RATINGS_EXPORT_URL, api } from "../api/client";
 import type { AdminUser, InviteLink, NewUser, Role, SiteSettings } from "../api/types";
@@ -8,10 +8,12 @@ import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader, Select, S
 import { ME_KEY, useMe } from "../lib/auth";
 import { dateTime, errorText, integer, relative, thisMonth, yuan } from "../lib/format";
 import { RatingCard } from "./RatingsPage";
+import { AssignmentsTab, FeedbackQueue, IdeasQueue } from "./ReviewPages";
 
 const TABS = [
   { id: "users", label: "用户与配额" }, { id: "usage", label: "用量与费用" },
   { id: "ratings", label: "测评记录" }, { id: "settings", label: "全站设置" },
+  { id: "assignments", label: "派题与进度" }, { id: "feedback", label: "问题复核" }, { id: "ideas", label: "研究想法" },
 ] as const;
 
 function InviteBox({ link, onClose }: { link: InviteLink; onClose: () => void }) {
@@ -31,17 +33,18 @@ function InviteBox({ link, onClose }: { link: InviteLink; onClose: () => void })
 function UserRow({ user, self, onInvite }: { user: AdminUser; self: boolean; onInvite: (link: InviteLink) => void }) {
   const client = useQueryClient();
   const [limit, setLimit] = useState(String(user.daily_limit));
+  const [reserve, setReserve] = useState(String(user.evaluation_reserve));
   const update = useMutation({
     mutationFn: (patch: Parameters<typeof api.updateUser>[1]) => api.updateUser(user.id, patch),
     onSuccess: () => { client.invalidateQueries({ queryKey: ["admin-users"] }); client.invalidateQueries({ queryKey: ME_KEY }); },
   });
   const reinvite = useMutation({ mutationFn: () => api.reinvite(user.id), onSuccess: onInvite });
-  const dirty = Number(limit) !== user.daily_limit;
+  const dirty = Number(limit) !== user.daily_limit || Number(reserve) !== user.evaluation_reserve;
 
   return (
     <tr className={`border-t border-[#eef0e8] align-middle ${user.disabled ? "text-faint" : ""}`}>
       <td className="px-3 py-2.5">
-        <div className="font-medium">{user.display_name}</div>
+        <Link to={`/admin/researchers/${user.id}`} className="font-medium underline">{user.display_name}</Link>
         <div className="text-xs text-muted">{user.username}</div>
       </td>
       <td className="px-3 py-2.5">
@@ -54,9 +57,9 @@ function UserRow({ user, self, onInvite }: { user: AdminUser; self: boolean; onI
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5">
           <Input aria-label={`${user.display_name}的每日上限`} className="h-8 min-w-16 max-w-20 text-xs" type="number" min={0} max={500} value={limit} onChange={(e) => setLimit(e.target.value)} />
-          {dirty && <Button className="h-8 px-2 text-xs" onClick={() => update.mutate({ daily_limit: Number(limit) })}>保存</Button>}
         </div>
       </td>
+      <td className="px-3 py-2.5"><div className="flex items-center gap-2"><Input aria-label={`${user.display_name}的测评预留`} className="h-8 min-w-16 max-w-20 text-xs" type="number" min={0} max={Number(limit)} value={reserve} onChange={e => setReserve(e.target.value)} />{dirty && <Button className="h-8 px-2 text-xs" disabled={update.isPending || !limit || !reserve || Number(reserve) > Number(limit)} onClick={() => update.mutate({ daily_limit: Number(limit), evaluation_reserve: Number(reserve) })}>保存</Button>}</div></td>
       <td className="px-3 py-2.5 text-xs tabular-nums">{user.used_today}</td>
       <td className="px-3 py-2.5 text-xs">{user.invite_pending ? <Badge tone="warn">待接受邀请</Badge> : user.disabled ? <Badge>已停用</Badge> : <Badge tone="ok">正常</Badge>}</td>
       <td className="px-3 py-2.5 text-xs text-muted">{relative(user.last_active_at)}</td>
@@ -114,7 +117,7 @@ function UsersTab() {
         <Card className="overflow-x-auto">
           <table className="min-w-full text-left text-[13px] whitespace-nowrap">
             <thead className="bg-[#f0f2e9] text-xs text-[#6e785f]">
-              <tr>{["成员", "角色", "每日上限", "今日已用", "状态", "最近活动", "操作"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
+              <tr>{["成员", "角色", "每日上限", "测评预留", "今日已用", "状态", "最近活动", "操作"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
             </thead>
             <tbody>{users.data.map((u) => <UserRow key={u.id} user={u} self={u.id === me.id} onInvite={setInvite} />)}</tbody>
           </table>
@@ -219,8 +222,8 @@ const SETTING_FIELDS: { key: keyof SiteSettings; label: string; hint: string; ty
   { key: "site_daily_limit", label: "全站每日提问上限", hint: "", type: "number" },
   { key: "max_concurrent_jobs", label: "全站最多同时运行", hint: "超出的问题排队", type: "number" },
   { key: "per_user_concurrent_jobs", label: "每人最多同时运行", hint: "", type: "number" },
-  { key: "input_price_per_million_yuan", label: "输入单价（元/百万 token）", hint: "只用于费用估算", type: "number", step: "0.01" },
-  { key: "output_price_per_million_yuan", label: "输出单价（元/百万 token）", hint: "只用于费用估算", type: "number", step: "0.01" },
+  { key: "input_price_per_million_yuan", label: "默认模型输入单价（元/百万 token）", hint: "其他模型费用显示未知", type: "number", step: "0.01" },
+  { key: "output_price_per_million_yuan", label: "默认模型输出单价（元/百万 token）", hint: "只用于费用估算", type: "number", step: "0.01" },
 ];
 
 function SettingsTab() {
@@ -275,6 +278,9 @@ export function AdminPage() {
       {tab === "usage" && <UsageTab />}
       {tab === "ratings" && <RatingsTab />}
       {tab === "settings" && <SettingsTab />}
+      {tab === "assignments" && <AssignmentsTab />}
+      {tab === "feedback" && <FeedbackQueue />}
+      {tab === "ideas" && <IdeasQueue />}
     </Page>
   );
 }

@@ -349,16 +349,24 @@ class APITests(unittest.TestCase):
         with self.store.connection(write=True) as db:
             old_settings = self.store.settings(db)
             old_settings.pop('allow_post_cutoff_reference_after_submit')
-            db.execute('UPDATE settings SET value=?', (json.dumps(old_settings),))
-            db.execute('PRAGMA user_version=1')
-            tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name!='settings'")]
-            before = {table: [tuple(r) for r in db.execute(f'SELECT * FROM {table} ORDER BY rowid')] for table in tables}
-        upgraded = Store(self.config.database, '2023-03-15')
-        Store(self.config.database, '2023-03-15')
+            old_settings.pop('anonymous_ab_evaluation')
+            legacy_path = self.root / 'legacy.sqlite'
+            with sqlite3.connect(legacy_path) as legacy:
+                legacy.executescript(Path('socialdog_agent/server/migrations/001_initial.sql').read_text())
+                tables = [r[0] for r in legacy.execute("SELECT name FROM sqlite_master WHERE type='table' AND name!='settings'")]
+                columns = {t: ','.join(r[1] for r in legacy.execute(f'PRAGMA table_info({t})')) for t in tables}
+                before = {t: [tuple(r) for r in db.execute(f'SELECT {columns[t]} FROM {t} ORDER BY rowid')] for t in tables}
+                for table in tables:
+                    for row in before[table]:
+                        legacy.execute(f'INSERT INTO {table} VALUES ({",".join("?" for _ in row)})', row)
+                legacy.execute('INSERT INTO settings VALUES (1,?)', (json.dumps(old_settings),))
+                legacy.execute('PRAGMA user_version=1')
+        upgraded = Store(legacy_path, '2023-03-15')
+        Store(legacy_path, '2023-03-15')
         with upgraded.connection() as db:
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], CURRENT_VERSION)
-            self.assertEqual(upgraded.settings(db), {**old_settings, 'allow_post_cutoff_reference_after_submit': False})
-            self.assertEqual(before, {table: [tuple(r) for r in db.execute(f'SELECT * FROM {table} ORDER BY rowid')] for table in tables})
+            self.assertEqual(upgraded.settings(db), {**old_settings, 'allow_post_cutoff_reference_after_submit': False, 'anonymous_ab_evaluation': False})
+            self.assertEqual(before, {table: [tuple(r) for r in db.execute(f'SELECT {columns[table]} FROM {table} ORDER BY rowid')] for table in tables})
 
     def test_failed_or_unknown_migration_does_not_advance_version(self):
         path = self.root / 'bad.sqlite'
@@ -475,7 +483,7 @@ class APITests(unittest.TestCase):
     def test_missing_key_refuses_before_reserving_quota(self):
         from dataclasses import replace
         from unittest.mock import patch
-        with patch('chat_agent.load_settings', return_value={'DEEPSEEK_MODEL': 'test-model', 'DEEPSEEK_API_KEY': ''}):
+        with patch('chat_agent.load_settings', return_value={'DEEPSEEK_MODEL': 'test-model', 'DEEPSEEK_API_KEY': '', 'DEEPSEEK_REASONING_EFFORT': 'low'}):
             app = create_app(replace(self.config, database=self.root / 'unconfigured.sqlite'))
         token, _ = app.state.store.bootstrap('owner', '管理员')
         with TestClient(app, base_url='https://testserver') as client:

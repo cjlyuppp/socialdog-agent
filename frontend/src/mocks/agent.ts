@@ -97,7 +97,7 @@ export function runMockAgent(question: string): AgentResult & { usage: { input_t
     : /商品|产品|卖得/.test(q) ? grouped("product", "按商品")
     : grouped("all", "总计");
   return {
-    ...picked, snapshot_versions: [DATASET_VERSION], model: "deepseek-flash（模拟）",
+    ...picked, snapshot_versions: [DATASET_VERSION], model: "deepseek-flash（模拟）", reasoning_effort: "high",
     grounding: { ungrounded_numbers: [], repair_attempted: false },
     request_id: crypto.randomUUID().replaceAll("-", ""),
     usage: { input_tokens: 5200 + q.length * 3, output_tokens: 380 + picked.answer.length },

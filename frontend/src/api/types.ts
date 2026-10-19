@@ -10,6 +10,8 @@ export interface Quota {
   remaining_today: number;
   /** Questions left today for the whole site; the third cost guard. */
   site_remaining_today: number;
+  evaluation_reserve: number;
+  chat_remaining_today: number;
 }
 
 export interface Me {
@@ -22,6 +24,7 @@ export interface Me {
   quota: Quota;
   /** Each researcher may run at most one job at a time. */
   running_job_id: string | null;
+  notice_version: number;
 }
 
 export interface InviteInfo {
@@ -68,7 +71,13 @@ export interface AgentResult {
   model: string;
   request_id: string;
   usage: { input_tokens: number | null; output_tokens: number | null };
+  reasoning_effort: string | null;
 }
+
+export type ReasoningEffort = "none" | "low" | "high" | "max";
+export interface ModelSelection { model: string; reasoning_effort: ReasoningEffort }
+export interface ModelOption { id: string; label: string; reasoning_efforts: ReasoningEffort[] }
+export interface ModelCatalog { models: ModelOption[]; default_model: string; default_reasoning_effort: ReasoningEffort }
 
 export type TurnStatus = "running" | "ok" | "error";
 
@@ -169,6 +178,8 @@ export interface EvalQuestion {
   reference_hint: Partial<ReferenceQuery> | null;
 }
 
+export interface VersionedQuestion extends EvalQuestion { bank_version_id: string }
+
 export type NumberVerdict = "correct" | "partial" | "wrong" | "not_applicable";
 
 export interface RatingScores {
@@ -185,6 +196,8 @@ export interface EvalAttempt {
   job_id: string;
   turn: Turn;
   rated: boolean;
+  bank_version_id: string | null;
+  question_snapshot: Record<string, unknown> | null;
 }
 
 export interface Rating {
@@ -205,6 +218,7 @@ export interface RatingInput {
   attempt_id: string;
   scores: RatingScores;
   note: string;
+  issues?: IssueDraft[];
 }
 
 // ---- Admin
@@ -215,6 +229,7 @@ export interface AdminUser {
   display_name: string;
   role: Role;
   daily_limit: number;
+  evaluation_reserve: number;
   disabled: boolean;
   used_today: number;
   last_active_at: string | null;
@@ -226,11 +241,13 @@ export interface NewUser {
   display_name: string;
   role: Role;
   daily_limit: number;
+  evaluation_reserve?: number;
 }
 
 export interface UserPatch {
   role?: Role;
   daily_limit?: number;
+  evaluation_reserve?: number;
   disabled?: boolean;
 }
 
@@ -262,4 +279,44 @@ export interface SiteSettings {
   max_concurrent_jobs: number;
   per_user_concurrent_jobs: number;
   allow_post_cutoff_reference_after_submit: false;
+  anonymous_ab_evaluation: false;
+}
+
+export type Stage = "retrieval" | "definition" | "calculation" | "reasoning" | "conclusion" | "other";
+export type ReviewStatus = "pending" | "confirmed" | "rejected" | "discuss";
+export type IdeaStatus = "pending" | "feedback_given" | "invited" | "not_suitable";
+export interface IssueDraft {
+  stage: Stage;
+  description: string;
+  correct_approach: string;
+  evidence_refs: string[];
+}
+export interface FeedbackInput extends IssueDraft { source: "chat" | "evaluation"; turn_id: string; attempt_id: string | null }
+export interface FeedbackIssue extends FeedbackInput {
+  id: string; user_id: string; display_name: string; question: string; model_answer: string;
+  evidence_snapshot: Evidence[]; review_status: ReviewStatus; review_note: string;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+}
+export interface IdeaInput {
+  question: string; data_used: string; findings: string; next_steps: string; linked_conversations: string[];
+}
+export interface ResearchIdea extends IdeaInput {
+  id: string; user_id: string; display_name: string; status: IdeaStatus; reviewer_feedback: string;
+  reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface Assignment {
+  id: string; question_id: string; bank_version_id: string; user_id: string; display_name: string;
+  assigned_by: string; due_at: string | null; created_at: string; attempt_id: string | null;
+  completed: boolean; overdue: boolean; question: VersionedQuestion;
+}
+export interface AssignmentProgress { user_id: string; display_name: string; assigned: number; completed: number; overdue: number }
+export interface BankVersion {
+  id: string; cutoff_T: string | null; threshold_N: number | null; dataset_version: string | null;
+  legacy: boolean; created_at: string; question_count: number;
+}
+export interface ResearcherSummary {
+  user: AdminUser; quota: Quota; question_count: number;
+  recent_questions: { id: string; question: string; session_id: string; created_at: string }[];
+  ratings: Rating[]; feedback_count: number; confirmed_count: number; reviewed_count: number;
+  confirmed_ratio: number | null; ideas: ResearchIdea[]; assignments: Assignment[];
 }

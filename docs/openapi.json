@@ -5,6 +5,24 @@
     "version": "0.2.0"
   },
   "paths": {
+    "/api/models": {
+      "get": {
+        "summary": "Models",
+        "operationId": "models_api_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me": {
       "get": {
         "summary": "Me",
@@ -481,7 +499,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/EvalQuestion"
+                    "$ref": "#/components/schemas/VersionedQuestion"
                   },
                   "type": "array",
                   "title": "Response Eval Questions Api Eval Questions Get"
@@ -917,6 +935,635 @@
           }
         }
       }
+    },
+    "/api/notice/accept": {
+      "post": {
+        "summary": "Accept Notice",
+        "operationId": "accept_notice_api_notice_accept_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "summary": "Feedback",
+        "operationId": "feedback_api_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackIssue"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback/mine": {
+      "get": {
+        "summary": "My Feedback",
+        "operationId": "my_feedback_api_feedback_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FeedbackIssue"
+                  },
+                  "type": "array",
+                  "title": "Response My Feedback Api Feedback Mine Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/feedback": {
+      "get": {
+        "summary": "Feedback Queue",
+        "operationId": "feedback_queue_api_admin_feedback_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "chat",
+                    "evaluation"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "retrieval",
+                    "definition",
+                    "calculation",
+                    "reasoning",
+                    "conclusion",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stage"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "review_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "confirmed",
+                    "rejected",
+                    "discuss"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FeedbackIssue"
+                  },
+                  "title": "Response Feedback Queue Api Admin Feedback Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/feedback/{issue_id}": {
+      "patch": {
+        "summary": "Review Issue",
+        "operationId": "review_issue_api_admin_feedback__issue_id__patch",
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issue Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackIssue"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/improvements/export.json": {
+      "get": {
+        "summary": "Export Improvements",
+        "operationId": "export_improvements_api_admin_improvements_export_json_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FeedbackIssue"
+                  },
+                  "type": "array",
+                  "title": "Response Export Improvements Api Admin Improvements Export Json Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ideas": {
+      "post": {
+        "summary": "Create Idea",
+        "operationId": "create_idea_api_ideas_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchIdea"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ideas/mine": {
+      "get": {
+        "summary": "My Ideas",
+        "operationId": "my_ideas_api_ideas_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchIdea"
+                  },
+                  "type": "array",
+                  "title": "Response My Ideas Api Ideas Mine Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ideas": {
+      "get": {
+        "summary": "All Ideas",
+        "operationId": "all_ideas_api_admin_ideas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchIdea"
+                  },
+                  "type": "array",
+                  "title": "Response All Ideas Api Admin Ideas Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ideas/{idea_id}": {
+      "patch": {
+        "summary": "Review Idea",
+        "operationId": "review_idea_api_admin_ideas__idea_id__patch",
+        "parameters": [
+          {
+            "name": "idea_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idea Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchIdea"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assignments/mine": {
+      "get": {
+        "summary": "My Assignments",
+        "operationId": "my_assignments_api_assignments_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Assignment"
+                  },
+                  "type": "array",
+                  "title": "Response My Assignments Api Assignments Mine Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/assignments": {
+      "get": {
+        "summary": "All Assignments",
+        "operationId": "all_assignments_api_admin_assignments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Assignment"
+                  },
+                  "type": "array",
+                  "title": "Response All Assignments Api Admin Assignments Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Assign",
+        "operationId": "assign_api_admin_assignments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignmentInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assignment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/progress": {
+      "get": {
+        "summary": "Progress",
+        "operationId": "progress_api_admin_progress_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssignmentProgress"
+                  },
+                  "type": "array",
+                  "title": "Response Progress Api Admin Progress Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/question-bank/versions": {
+      "get": {
+        "summary": "Versions",
+        "operationId": "versions_api_admin_question_bank_versions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BankVersion"
+                  },
+                  "type": "array",
+                  "title": "Response Versions Api Admin Question Bank Versions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/eval/attempts": {
+      "get": {
+        "summary": "My Attempts",
+        "operationId": "my_attempts_api_eval_attempts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalAttempt"
+                  },
+                  "type": "array",
+                  "title": "Response My Attempts Api Eval Attempts Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/researchers/{user_id}": {
+      "get": {
+        "summary": "Researcher Summary",
+        "operationId": "researcher_summary_api_admin_researchers__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearcherSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/researchers/{user_id}/sessions/{session_id}": {
+      "get": {
+        "summary": "Inspect Conversation",
+        "operationId": "inspect_conversation_api_admin_researchers__user_id__sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -970,6 +1617,10 @@
             "type": "integer",
             "title": "Daily Limit"
           },
+          "evaluation_reserve": {
+            "type": "integer",
+            "title": "Evaluation Reserve"
+          },
           "disabled": {
             "type": "boolean",
             "title": "Disabled"
@@ -1001,6 +1652,7 @@
           "display_name",
           "role",
           "daily_limit",
+          "evaluation_reserve",
           "disabled",
           "used_today",
           "last_active_at",
@@ -1041,6 +1693,17 @@
           },
           "usage": {
             "$ref": "#/components/schemas/Usage"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
           }
         },
         "type": "object",
@@ -1054,6 +1717,220 @@
           "usage"
         ],
         "title": "AgentResult"
+      },
+      "Assignment": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "bank_version_id": {
+            "type": "string",
+            "title": "Bank Version Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "assigned_by": {
+            "type": "string",
+            "title": "Assigned By"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "overdue": {
+            "type": "boolean",
+            "title": "Overdue"
+          },
+          "question": {
+            "$ref": "#/components/schemas/VersionedQuestion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "question_id",
+          "bank_version_id",
+          "user_id",
+          "display_name",
+          "assigned_by",
+          "due_at",
+          "created_at",
+          "attempt_id",
+          "completed",
+          "overdue",
+          "question"
+        ],
+        "title": "Assignment"
+      },
+      "AssignmentInput": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "bank_version_id": {
+            "type": "string",
+            "title": "Bank Version Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_id",
+          "bank_version_id",
+          "user_id"
+        ],
+        "title": "AssignmentInput"
+      },
+      "AssignmentProgress": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "assigned": {
+            "type": "integer",
+            "title": "Assigned"
+          },
+          "completed": {
+            "type": "integer",
+            "title": "Completed"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "assigned",
+          "completed",
+          "overdue"
+        ],
+        "title": "AssignmentProgress"
+      },
+      "BankVersion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "cutoff_T": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff T"
+          },
+          "threshold_N": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold N"
+          },
+          "dataset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Version"
+          },
+          "legacy": {
+            "type": "boolean",
+            "title": "Legacy"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "cutoff_T",
+          "threshold_N",
+          "dataset_version",
+          "legacy",
+          "created_at",
+          "question_count"
+        ],
+        "title": "BankVersion"
       },
       "CreatedUser": {
         "properties": {
@@ -1193,6 +2070,29 @@
           "rated": {
             "type": "boolean",
             "title": "Rated"
+          },
+          "bank_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Version Id"
+          },
+          "question_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Snapshot"
           }
         },
         "type": "object",
@@ -1202,61 +2102,11 @@
           "own_answer",
           "job_id",
           "turn",
-          "rated"
+          "rated",
+          "bank_version_id",
+          "question_snapshot"
         ],
         "title": "EvalAttempt"
-      },
-      "EvalQuestion": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
-            "title": "Id"
-          },
-          "category": {
-            "type": "string",
-            "enum": [
-              "time_series",
-              "product",
-              "price_event",
-              "quality",
-              "unavailable",
-              "out_of_sample"
-            ],
-            "title": "Category"
-          },
-          "title": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Title"
-          },
-          "question": {
-            "type": "string",
-            "maxLength": 4000,
-            "minLength": 1,
-            "title": "Question"
-          },
-          "reference_hint": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReferenceHint"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "category",
-          "title",
-          "question"
-        ],
-        "title": "EvalQuestion"
       },
       "Evidence": {
         "properties": {
@@ -1286,6 +2136,223 @@
           "result"
         ],
         "title": "Evidence"
+      },
+      "FeedbackInput": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "retrieval",
+              "definition",
+              "calculation",
+              "reasoning",
+              "conclusion",
+              "other"
+            ],
+            "title": "Stage"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "correct_approach": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Correct Approach",
+            "default": ""
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Evidence Refs"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "chat",
+              "evaluation"
+            ],
+            "title": "Source"
+          },
+          "turn_id": {
+            "type": "string",
+            "title": "Turn Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage",
+          "description",
+          "source",
+          "turn_id"
+        ],
+        "title": "FeedbackInput"
+      },
+      "FeedbackIssue": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "retrieval",
+              "definition",
+              "calculation",
+              "reasoning",
+              "conclusion",
+              "other"
+            ],
+            "title": "Stage"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "correct_approach": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Correct Approach",
+            "default": ""
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Evidence Refs"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "chat",
+              "evaluation"
+            ],
+            "title": "Source"
+          },
+          "turn_id": {
+            "type": "string",
+            "title": "Turn Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "model_answer": {
+            "type": "string",
+            "title": "Model Answer"
+          },
+          "evidence_snapshot": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence Snapshot"
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "confirmed",
+              "rejected",
+              "discuss"
+            ],
+            "title": "Review Status"
+          },
+          "review_note": {
+            "type": "string",
+            "title": "Review Note"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage",
+          "description",
+          "id",
+          "user_id",
+          "display_name",
+          "source",
+          "turn_id",
+          "attempt_id",
+          "question",
+          "model_answer",
+          "evidence_snapshot",
+          "review_status",
+          "review_note",
+          "reviewed_by",
+          "reviewed_at",
+          "created_at"
+        ],
+        "title": "FeedbackIssue"
       },
       "Grounding": {
         "properties": {
@@ -1320,6 +2387,77 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "IdeaInput": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "data_used": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Data Used"
+          },
+          "findings": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Findings"
+          },
+          "next_steps": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Next Steps"
+          },
+          "linked_conversations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Linked Conversations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "data_used",
+          "findings",
+          "next_steps"
+        ],
+        "title": "IdeaInput"
+      },
+      "IdeaReview": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "feedback_given",
+              "invited",
+              "not_suitable"
+            ],
+            "title": "Status"
+          },
+          "reviewer_feedback": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Reviewer Feedback",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "IdeaReview"
       },
       "InviteInfo": {
         "properties": {
@@ -1361,6 +2499,76 @@
           "expires_at"
         ],
         "title": "InviteLink"
+      },
+      "IssueDraft": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "retrieval",
+              "definition",
+              "calculation",
+              "reasoning",
+              "conclusion",
+              "other"
+            ],
+            "title": "Stage"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "correct_approach": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Correct Approach",
+            "default": ""
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Evidence Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage",
+          "description"
+        ],
+        "title": "IssueDraft"
+      },
+      "IssueReview": {
+        "properties": {
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "confirmed",
+              "rejected",
+              "discuss"
+            ],
+            "title": "Review Status"
+          },
+          "review_note": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Review Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_status"
+        ],
+        "title": "IssueReview"
       },
       "Job": {
         "properties": {
@@ -1490,6 +2698,10 @@
               }
             ],
             "title": "Running Job Id"
+          },
+          "notice_version": {
+            "type": "integer",
+            "title": "Notice Version"
           }
         },
         "type": "object",
@@ -1500,9 +2712,74 @@
           "role",
           "csrf_token",
           "quota",
-          "running_job_id"
+          "running_job_id",
+          "notice_version"
         ],
         "title": "Me"
+      },
+      "ModelCatalog": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelOption"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "default_model": {
+            "type": "string",
+            "title": "Default Model"
+          },
+          "default_reasoning_effort": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "high",
+              "max"
+            ],
+            "title": "Default Reasoning Effort"
+          }
+        },
+        "type": "object",
+        "required": [
+          "models",
+          "default_model",
+          "default_reasoning_effort"
+        ],
+        "title": "ModelCatalog"
+      },
+      "ModelOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "reasoning_efforts": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "none",
+                "low",
+                "high",
+                "max"
+              ]
+            },
+            "type": "array",
+            "title": "Reasoning Efforts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "reasoning_efforts"
+        ],
+        "title": "ModelOption"
       },
       "NewUser": {
         "properties": {
@@ -1532,6 +2809,13 @@
             "minimum": 0.0,
             "title": "Daily Limit",
             "default": 30
+          },
+          "evaluation_reserve": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Evaluation Reserve",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -1544,11 +2828,62 @@
       },
       "OwnAnswer": {
         "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "low",
+                  "high",
+                  "max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "own_answer": {
             "type": "string",
             "maxLength": 4000,
             "minLength": 1,
             "title": "Own Answer"
+          },
+          "bank_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Version Id"
+          },
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
           }
         },
         "additionalProperties": false,
@@ -1603,6 +2938,35 @@
       },
       "QuestionInput": {
         "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "low",
+                  "high",
+                  "max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "question": {
             "type": "string",
             "maxLength": 4000,
@@ -1634,6 +2998,14 @@
           "site_remaining_today": {
             "type": "integer",
             "title": "Site Remaining Today"
+          },
+          "evaluation_reserve": {
+            "type": "integer",
+            "title": "Evaluation Reserve"
+          },
+          "chat_remaining_today": {
+            "type": "integer",
+            "title": "Chat Remaining Today"
           }
         },
         "type": "object",
@@ -1641,7 +3013,9 @@
           "daily_limit",
           "used_today",
           "remaining_today",
-          "site_remaining_today"
+          "site_remaining_today",
+          "evaluation_reserve",
+          "chat_remaining_today"
         ],
         "title": "Quota"
       },
@@ -1721,6 +3095,14 @@
             "maxLength": 4000,
             "title": "Note",
             "default": ""
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/IssueDraft"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Issues"
           }
         },
         "additionalProperties": false,
@@ -2066,6 +3448,187 @@
         ],
         "title": "ReferenceRow"
       },
+      "ResearchIdea": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "data_used": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Data Used"
+          },
+          "findings": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Findings"
+          },
+          "next_steps": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Next Steps"
+          },
+          "linked_conversations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Linked Conversations"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "feedback_given",
+              "invited",
+              "not_suitable"
+            ],
+            "title": "Status"
+          },
+          "reviewer_feedback": {
+            "type": "string",
+            "title": "Reviewer Feedback"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "data_used",
+          "findings",
+          "next_steps",
+          "id",
+          "user_id",
+          "display_name",
+          "status",
+          "reviewer_feedback",
+          "reviewed_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ResearchIdea"
+      },
+      "ResearcherSummary": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AdminUser"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/Quota"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count"
+          },
+          "recent_questions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Recent Questions"
+          },
+          "ratings": {
+            "items": {
+              "$ref": "#/components/schemas/Rating"
+            },
+            "type": "array",
+            "title": "Ratings"
+          },
+          "feedback_count": {
+            "type": "integer",
+            "title": "Feedback Count"
+          },
+          "confirmed_count": {
+            "type": "integer",
+            "title": "Confirmed Count"
+          },
+          "reviewed_count": {
+            "type": "integer",
+            "title": "Reviewed Count"
+          },
+          "confirmed_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Ratio"
+          },
+          "ideas": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchIdea"
+            },
+            "type": "array",
+            "title": "Ideas"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/Assignment"
+            },
+            "type": "array",
+            "title": "Assignments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "quota",
+          "question_count",
+          "recent_questions",
+          "ratings",
+          "feedback_count",
+          "confirmed_count",
+          "reviewed_count",
+          "confirmed_ratio",
+          "ideas",
+          "assignments"
+        ],
+        "title": "ResearcherSummary"
+      },
       "Session": {
         "properties": {
           "id": {
@@ -2194,6 +3757,12 @@
             "type": "boolean",
             "const": false,
             "title": "Allow Post Cutoff Reference After Submit",
+            "default": false
+          },
+          "anonymous_ab_evaluation": {
+            "type": "boolean",
+            "const": false,
+            "title": "Anonymous Ab Evaluation",
             "default": false
           }
         },
@@ -2432,6 +4001,19 @@
             ],
             "title": "Daily Limit"
           },
+          "evaluation_reserve": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 500.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Reserve"
+          },
           "disabled": {
             "anyOf": [
               {
@@ -2551,6 +4133,63 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VersionedQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "time_series",
+              "product",
+              "price_event",
+              "quality",
+              "unavailable",
+              "out_of_sample"
+            ],
+            "title": "Category"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "reference_hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bank_version_id": {
+            "type": "string",
+            "title": "Bank Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "title",
+          "question",
+          "bank_version_id"
+        ],
+        "title": "VersionedQuestion"
       }
     }
   }

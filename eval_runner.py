@@ -51,6 +51,8 @@ def normalized_arguments(operation: str, arguments: dict) -> dict:
 def expected_result(case: dict, min_orders: int) -> dict:
     """The golden answer as the agent's tool should return it: yuan units, threshold applied."""
     expected = case["expected_result"]
+    if case["operation"] == "describe":
+        expected = {key: value for key, value in expected.items() if key != "source_rows_removed_after_as_of"}
     if case["operation"] == "aggregate" and expected.get("rows"):
         expected = {**expected, "rows": [r for r in expected["rows"] if r["order_count"] >= min_orders]}
     if case["operation"] == "price_events" and expected.get("events") is not None:

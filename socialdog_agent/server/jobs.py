@@ -83,7 +83,7 @@ class JobRunner:
                                 "query_scopes": [{"tool": item["tool"], **json.loads(item["arguments"])} for item in result["evidence"]]})
             state = self.state / job["user_id"]
             # Neither the reference object nor a participant's own answer enters this factory.
-            agent = ResearchAgent(MeteredLLM(self.llm_factory(), self.store, job["id"], self.stopping),
+            agent = ResearchAgent(MeteredLLM(self.llm_factory(config), self.store, job["id"], self.stopping),
                                   state=state, tool_factory=lambda: self.source.tools(state, config))
 
             def progress(event):
@@ -95,6 +95,7 @@ class JobRunner:
 
             result = agent.ask(turn["question"], history=history, on_event=progress)
             result["usage"] = self.store.job_usage(job["id"])
+            result["reasoning_effort"] = config.get("reasoning_effort")
             public = AgentResult.model_validate(result).model_dump()
             self.store.finish(job["id"], result=public)
         except (LLMError, APIError) as error:

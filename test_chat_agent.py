@@ -230,10 +230,10 @@ class ResponsesClientTest(unittest.TestCase):
                 client.create_response(input=[], instructions="", tools=[])
 
     def test_deepseek_thinking_uses_auto_without_disabling_reasoning(self):
-        for effort in ("none", "low", "high"):
+        for effort in ("none", "low", "high", "max"):
             for choice in ("required", "auto", "none"):
                 with self.subTest(effort=effort, choice=choice):
-                    client = DeepSeekLLM(api_key="TEST_ONLY_KEY", reasoning_effort=effort)
+                    client = DeepSeekLLM(api_key="TEST_ONLY_KEY", model="deepseek-v4-pro", reasoning_effort=effort)
                     body = json.dumps(response(message())).encode()
                     with patch.object(client._opener, "open", return_value=io.BytesIO(body)) as send:
                         client.create_response(input=[{"role": "user", "content": "查询数据"}],
@@ -243,6 +243,7 @@ class ResponsesClientTest(unittest.TestCase):
                     expected = "auto" if effort != "none" and choice == "required" else choice
                     self.assertEqual(payload["tool_choice"], expected)
                     self.assertEqual(payload["reasoning"], {"effort": effort})
+                    self.assertEqual(payload["model"], "deepseek-v4-pro")
 
     def test_incomplete_and_malformed_outputs_rejected(self):
         bad_responses = [response(message(), status="incomplete"), response({"type": "computer_call"}),

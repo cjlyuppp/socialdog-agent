@@ -99,17 +99,21 @@ class Store:
     def quota(self, db, user):
         used = db.execute("SELECT count(*) FROM jobs WHERE user_id=? AND quota_day=?", (user["id"], today())).fetchone()[0]
         site = db.execute("SELECT count(*) FROM jobs WHERE quota_day=?", (today(),)).fetchone()[0]
+        chat_used = db.execute("SELECT count(*) FROM jobs j WHERE user_id=? AND quota_day=? AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.job_id=j.id)", (user["id"], today())).fetchone()[0]
         return {"daily_limit": user["daily_limit"], "used_today": used,
                 "remaining_today": max(0, user["daily_limit"] - used),
+                "evaluation_reserve": user["evaluation_reserve"],
+                "chat_remaining_today": max(0, min(user["daily_limit"] - used, user["daily_limit"] - user["evaluation_reserve"] - chat_used)),
                 "site_remaining_today": max(0, self.settings(db)["site_daily_limit"] - site)}
 
     def me(self, db, user, csrf):
         job = db.execute("SELECT id FROM jobs WHERE user_id=? AND status IN ('queued','running')", (user["id"],)).fetchone()
         return {**{k: user[k] for k in ("id", "username", "display_name", "role")},
-                "csrf_token": csrf, "quota": self.quota(db, user), "running_job_id": job[0] if job else None}
+                "csrf_token": csrf, "quota": self.quota(db, user), "running_job_id": job[0] if job else None,
+                "notice_version": user["notice_version"]}
 
     def public_user(self, db, user):
-        return {**{k: user[k] for k in ("id", "username", "display_name", "role", "daily_limit", "last_active_at")},
+        return {**{k: user[k] for k in ("id", "username", "display_name", "role", "daily_limit", "evaluation_reserve", "last_active_at")},
                 "disabled": bool(user["disabled"]), "invite_pending": bool(user["invite_hash"]),
                 "used_today": self.quota(db, user)["used_today"]}
 
@@ -180,7 +184,10 @@ class Store:
         row = db.execute("SELECT * FROM attempts WHERE id=? AND user_id=?", (attempt_id, user_id)).fetchone()
         if not row:
             raise APIError(404, "未找到该测评。")
-        return {**{k: row[k] for k in ("id", "question_id", "own_answer", "job_id")},
+        bank = db.execute("SELECT questions FROM question_bank_version WHERE id=?", (row["bank_version_id"],)).fetchone()
+        question = next((q for q in json.loads(bank[0]) if q["id"] == row["question_id"]), None) if bank else None
+        return {**{k: row[k] for k in ("id", "question_id", "own_answer", "job_id", "bank_version_id")},
+                "question_snapshot": question,
                 "turn": self.turn(db, row["turn_id"]),
                 "rated": bool(db.execute("SELECT 1 FROM ratings WHERE attempt_id=?", (attempt_id,)).fetchone())}
 
@@ -196,10 +203,25 @@ class Store:
             quota = self.quota(db, user)
             if quota["remaining_today"] <= 0 or quota["site_remaining_today"] <= 0:
                 raise APIError(429, "今日提问次数已用完，请明天再来。")
+            if not evaluation and quota["chat_remaining_today"] <= 0:
+                raise APIError(429, "今日研究对话额度已用完，预留额度仍可用于测评。")
             # The quota reservation, task and turn commit together, before any model call.
             turn_id, job_id, stamp = uid(), uid(), now()
             settings = self.settings(db)
             config = {**config, "min_orders_per_group": settings["min_orders_per_group"]}
+            if evaluation:
+                bank = db.execute("SELECT * FROM question_bank_version WHERE id=?", (evaluation["bank_version_id"],)).fetchone()
+                if not bank or bank["dataset_version"] != config["dataset_version"]:
+                    raise APIError(409, "这份题目对应的数据包未加载，请联系管理员。")
+                config["min_orders_per_group"] = bank["threshold_N"]
+                config["bank_version_id"] = bank["id"]
+                assignment_id = evaluation.get("assignment_id")
+                if assignment_id:
+                    assigned = db.execute("SELECT * FROM assignment WHERE id=? AND user_id=? AND question_id=? AND bank_version_id=?", (assignment_id, user_id, evaluation["id"], bank["id"])).fetchone()
+                    if not assigned:
+                        raise APIError(404, "未找到该待办。")
+                    if assigned["attempt_id"]:
+                        raise APIError(409, "这项待办已经提交，请在我的待办中查看。")
             db.execute("INSERT INTO turns VALUES (?,?,?,?,?,?,?,?,?)", (turn_id, user_id, session_id, question.strip(), "running", stamp, job_id, None, None))
             events = [{"phase": "queued", "text": "正在排队", "at": stamp}]
             db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?)", (job_id, user_id, session_id, turn_id, "queued", stamp, today(), encoded(config), encoded(events), None))
@@ -207,7 +229,9 @@ class Store:
                 db.execute("UPDATE sessions SET title=CASE WHEN title='新的对话' THEN ? ELSE title END,updated_at=? WHERE id=?", (question.strip()[:28], stamp, session_id))
             if evaluation:
                 attempt_id = uid()
-                db.execute("INSERT INTO attempts VALUES (?,?,?,?,?,?,?)", (attempt_id, user_id, evaluation["id"], evaluation["title"], evaluation["own_answer"], turn_id, job_id))
+                db.execute("INSERT INTO attempts(id,user_id,question_id,question_title,own_answer,turn_id,job_id,bank_version_id) VALUES (?,?,?,?,?,?,?,?)", (attempt_id, user_id, evaluation["id"], evaluation["title"], evaluation["own_answer"], turn_id, job_id, evaluation["bank_version_id"]))
+                # A saved independent answer is a submission, even if the model later fails.
+                db.execute("UPDATE assignment SET attempt_id=? WHERE user_id=? AND question_id=? AND bank_version_id=? AND attempt_id IS NULL", (attempt_id, user_id, evaluation["id"], evaluation["bank_version_id"]))
                 return self.attempt(db, attempt_id, user_id)
             return {"turn": self.turn(db, turn_id), "job": self.job(db, job_id, user_id)}
 

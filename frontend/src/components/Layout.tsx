@@ -7,10 +7,13 @@ import { relative } from "../lib/format";
 import { Icon, type IconName } from "./Icon";
 
 const LINKS: { to: string; label: string; icon: IconName }[] = [
+  { to: "/guide", label: "研究入门", icon: "info" },
+  { to: "/todo", label: "我的待办", icon: "evaluate" },
   { to: "/chat", label: "研究对话", icon: "chat" },
   { to: "/reference", label: "数据核对", icon: "data" },
   { to: "/evaluate", label: "测评", icon: "evaluate" },
   { to: "/ratings", label: "我的测评", icon: "history" },
+  { to: "/mine", label: "我的研究", icon: "history" },
 ];
 
 export function Brand() {
@@ -37,7 +40,7 @@ function Sidebar({ me, onNavigate }: { me: Me; onNavigate: () => void }) {
 
   return (
     <div className="sidebar-content">
-      <NavLink to="/chat" className="sidebar-brand" aria-label="SocialDog 首页" onClick={onNavigate}><Brand /></NavLink>
+      <NavLink to="/home" className="sidebar-brand" aria-label="SocialDog 首页" onClick={onNavigate}><Brand /></NavLink>
       <nav className="workspace-nav" aria-label="主导航">
         {LINKS.map((link) => <NavLink key={link.to} to={link.to} onClick={onNavigate} className={({ isActive }) => `nav-item ${isActive ? "is-active" : ""}`}><Icon name={link.icon} /><span>{link.label}</span></NavLink>)}
       </nav>

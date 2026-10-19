@@ -46,7 +46,7 @@ function literals(node) {
     const definition = definitions.get(node.typeName.getText(source));
     return definition && ts.isTypeAliasDeclaration(definition) ? literals(definition.type) : null;
   }
-  if (ts.isLiteralTypeNode(node)) return [node.literal.kind === ts.SyntaxKind.NullKeyword ? null : ts.isStringLiteral(node.literal) ? node.literal.text : Number(node.literal.getText(source))];
+  if (ts.isLiteralTypeNode(node)) return [node.literal.kind === ts.SyntaxKind.NullKeyword ? null : node.literal.kind === ts.SyntaxKind.TrueKeyword ? true : node.literal.kind === ts.SyntaxKind.FalseKeyword ? false : ts.isStringLiteral(node.literal) ? node.literal.text : Number(node.literal.getText(source))];
   if (ts.isUnionTypeNode(node)) {
     const entries = node.types.map(literals);
     return entries.every(Boolean) ? entries.flat() : null;
@@ -55,7 +55,8 @@ function literals(node) {
 }
 
 let count = 0;
-for (const name of ["Quota", "Me", "AdminUser", "InviteInfo", "InviteLink", "DataStatus", "Session", "SessionDetail", "Evidence", "Grounding", "AgentResult", "Turn", "ProgressEvent", "Job", "ReferenceMeta", "ReferenceQuery", "ReferenceRow", "ReferenceResult", "EvalQuestion", "RatingScores", "EvalAttempt", "Rating", "UsageLine", "UsageReport", "SiteSettings"]) {
+const responses = ["Quota", "Me", "AdminUser", "InviteInfo", "InviteLink", "DataStatus", "Session", "SessionDetail", "Evidence", "Grounding", "AgentResult", "Turn", "ProgressEvent", "Job", "ReferenceMeta", "ReferenceQuery", "ReferenceRow", "ReferenceResult", "VersionedQuestion", "RatingScores", "EvalAttempt", "Rating", "UsageLine", "UsageReport", "SiteSettings", "FeedbackIssue", "ResearchIdea", "Assignment", "AssignmentProgress", "BankVersion", "ResearcherSummary", "ModelOption", "ModelCatalog"];
+for (const name of responses) {
   const schema = schemas[name + "-Output"] ?? schemas[name];
   assert.ok(schema, `Missing API response schema ${name}`);
   const front = fields(name), back = resolve(schema).properties;
@@ -64,7 +65,8 @@ for (const name of ["Quota", "Me", "AdminUser", "InviteInfo", "InviteLink", "Dat
     assert.deepEqual([...kinds(type)].sort(), [...schemaKinds(back[key])].sort(), `${name}.${key}: JSON types differ`);
     const values = literals(type), backend = resolve(back[key]);
     if (values && backend.enum) assert.deepEqual([...values].sort(), [...backend.enum].sort(), `${name}.${key}: allowed values differ`);
+    if (values && "const" in backend) assert.deepEqual(values, [backend.const], `${name}.${key}: fixed value differs`);
     count++;
   }
 }
-console.log(`API response contract: 25 interfaces, ${count} fields verified.`);
+console.log(`API response contract: ${responses.length} interfaces, ${count} fields verified.`);

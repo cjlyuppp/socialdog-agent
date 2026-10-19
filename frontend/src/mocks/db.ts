@@ -1,11 +1,12 @@
 // In-browser state for the mock backend, persisted to localStorage so reloads keep sessions.
 import type {
-  AdminUser, EvalAttempt, EvalQuestion, Job, ProgressEvent, Rating, Session, SiteSettings, Turn,
+  AdminUser, Assignment, EvalAttempt, EvalQuestion, FeedbackIssue, Job, ModelSelection, ProgressEvent, Rating, ResearchIdea, Session, SiteSettings, Turn,
 } from "../api/types";
 import { CUTOFF } from "./data";
 import { runMockAgent } from "./agent";
 
 export interface UserRecord extends Omit<AdminUser, "used_today"> {
+  notice_version: number;
   password: string | null;
   invite_token: string | null;
   invite_expires_at: string | null;
@@ -18,6 +19,7 @@ interface JobRecord {
   turn_id: string;
   question: string;
   started_ms: number;
+  selection?: ModelSelection;
 }
 
 interface UsageRecord {
@@ -36,18 +38,21 @@ export interface State {
   jobs: JobRecord[];
   attempts: (Omit<EvalAttempt, "turn" | "rated"> & { user_id: string; turn_id: string })[];
   ratings: (Rating & { user_id: string })[];
+  feedback: FeedbackIssue[];
+  ideas: ResearchIdea[];
+  assignments: Assignment[];
   usage: UsageRecord[];
   settings: SiteSettings;
 }
 
-const KEY = "socialdog-mock-v1";
+const KEY = "socialdog-mock-v2";
 export const id = () => crypto.randomUUID().replaceAll("-", "");
 export const now = () => new Date().toISOString();
 export const today = () => new Date().toISOString().slice(0, 10);
 
 function seed(): State {
   const user = (fields: Partial<UserRecord> & Pick<UserRecord, "username" | "display_name" | "role">): UserRecord => ({
-    id: id(), daily_limit: 30, disabled: false, last_active_at: null, invite_pending: false,
+    id: id(), daily_limit: 30, evaluation_reserve: 0, notice_version: 0, disabled: false, last_active_at: null, invite_pending: false,
     password: "demo", invite_token: null, invite_expires_at: null, ...fields,
   });
   const users = [
@@ -66,12 +71,13 @@ function seed(): State {
     });
   }
   return {
-    users, current_user_id: null, csrf: id(), sessions: [], turns: [], jobs: [], attempts: [], ratings: [], usage,
+    users, current_user_id: null, csrf: id(), sessions: [], turns: [], jobs: [], attempts: [], ratings: [], feedback: [], ideas: [], assignments: [], usage,
     settings: {
       site_daily_limit: 200, min_orders_per_group: 5, cutoff_date: CUTOFF,
       input_price_per_million_yuan: 2, output_price_per_million_yuan: 8,
       max_concurrent_jobs: 3, per_user_concurrent_jobs: 1,
       allow_post_cutoff_reference_after_submit: false,
+      anonymous_ab_evaluation: false,
     },
   };
 }
@@ -126,6 +132,8 @@ export function advance(job: JobRecord): Job {
       Object.assign(turn, { status: "error", error: "模拟错误：模型请求超时，请重试或缩小问题。" });
     } else {
       const result = runMockAgent(job.question);
+      result.model = (job.selection?.model ?? "deepseek-flash") + "（模拟）";
+      result.reasoning_effort = job.selection?.reasoning_effort ?? "high";
       Object.assign(turn, { status: "ok", result });
       db.usage.push({ user_id: job.user_id, date: today(), ...result.usage });
     }
@@ -138,10 +146,10 @@ export function advance(job: JobRecord): Job {
   };
 }
 
-export function startJob(userId: string, sessionId: string, question: string): { turn: Turn; job: Job } {
+export function startJob(userId: string, sessionId: string, question: string, selection?: ModelSelection): { turn: Turn; job: Job } {
   const turn = { id: id(), session_id: sessionId, question, status: "running" as const, created_at: now(),
                  job_id: id(), result: null, error: null };
-  const job = { id: turn.job_id, user_id: userId, session_id: sessionId, turn_id: turn.id, question, started_ms: Date.now() };
+  const job = { id: turn.job_id, user_id: userId, session_id: sessionId, turn_id: turn.id, question, started_ms: Date.now(), selection };
   db.turns.push(turn);
   db.jobs.push(job);
   save();

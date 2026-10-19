@@ -24,6 +24,7 @@ from . import models as m
 from .data import AgentData, ReferenceData, load_questions
 from .jobs import JobRunner
 from .store import APIError, PASSWORDS, Store, TZ, digest, encoded, now, uid
+from .workflow import Workflow, register_workflow
 
 COOKIE = "socialdog_session"
 
@@ -63,10 +64,11 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     questions = load_questions(config.question_bank)
     settings = chat_agent.load_settings()
     ready = llm_factory is not None or bool(settings.get("DEEPSEEK_API_KEY", "").strip())
-    factory = llm_factory or (lambda: chat_agent.make_llm(settings))
+    factory = (lambda job_config: llm_factory()) if llm_factory else (lambda job_config: chat_agent.make_llm({**settings, "DEEPSEEK_MODEL": job_config["model"], "DEEPSEEK_REASONING_EFFORT": job_config["reasoning_effort"]}))
     model = model_name or settings["DEEPSEEK_MODEL"]
     cutoff = source.cutoff if source else "1970-01-01"
     store = Store(config.database, cutoff)
+    workflow = Workflow(store, source, questions)
     runner = JobRunner(store, source, Path(config.state_dir), factory)
     dummy_password = PASSWORDS.hash(secrets.token_urlsafe(32))
 
@@ -154,12 +156,26 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     def invite_link(token, expires):
         return {"invite_url": origin + "/invite/" + token, "expires_at": expires}
 
-    def prepared():
+    model_options = [
+        {"id": "deepseek-flash", "label": "DeepSeek Flash", "reasoning_efforts": ["none", "low", "high", "max"]},
+        {"id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro", "reasoning_efforts": ["none", "low", "high", "max"]},
+    ]
+    default_effort = {"minimal": "low", "medium": "high"}.get(settings["DEEPSEEK_REASONING_EFFORT"], settings["DEEPSEEK_REASONING_EFFORT"])
+
+    def prepared(selection):
         if not source:
             raise APIError(503, "历史数据尚未配置，请联系管理员。")
         if not ready:
             raise APIError(503, "研究助理尚未配置，请联系管理员。")
-        return {"dataset_version": source.description["dataset_version"], "model": model}
+        selected = selection.model or model
+        if selection.model is not None and selected not in {item["id"] for item in model_options}:
+            raise APIError(400, "请选择可用的 DeepSeek 模型。")
+        return {"dataset_version": source.description["dataset_version"], "model": selected,
+                "reasoning_effort": selection.reasoning_effort or default_effort}
+
+    @app.get("/api/models", response_model=m.ModelCatalog)
+    def models(auth=Depends(identity)):
+        return {"models": model_options, "default_model": model, "default_reasoning_effort": default_effort}
 
     @app.get("/api/me", response_model=m.Me)
     def me(auth=Depends(identity)):
@@ -241,7 +257,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
 
     @app.post("/api/sessions/{session_id}/messages", response_model=m.Submitted, status_code=202)
     def ask(session_id: str, body: m.QuestionInput, auth=Depends(identity)):
-        result = store.submit(auth[0]["id"], body.question, prepared(), session_id=session_id)
+        result = store.submit(auth[0]["id"], body.question, prepared(body), session_id=session_id)
         runner.wake.set()
         return result
 
@@ -262,18 +278,19 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             raise APIError(503, "核对数据尚未配置，请联系管理员。")
         return reference.query(query, can_view_after_cutoff=auth[0]["role"] == "admin")
 
-    @app.get("/api/eval/questions", response_model=list[m.EvalQuestion], response_model_exclude_unset=True)
+    @app.get("/api/eval/questions", response_model=list[m.VersionedQuestion], response_model_exclude_unset=True)
     def eval_questions(auth=Depends(identity)):
-        return list(questions.values())
+        with store.connection(write=True) as db:
+            version = workflow.active_bank(db)
+            return [{**q, "bank_version_id": version} for q in questions.values()]
 
     @app.post("/api/eval/questions/{question_id}/run", response_model=m.EvalAttempt, status_code=202)
     def eval_run(question_id: str, body: m.OwnAnswer, auth=Depends(identity)):
-        question = questions.get(question_id)
-        if not question:
-            raise APIError(404, "未找到该题目。")
+        with store.connection(write=True) as db:
+            question = workflow.question(db, question_id, body.bank_version_id)
         if not body.own_answer.strip():
             raise APIError(400, "请先写下自己的答案。")
-        result = store.submit(auth[0]["id"], question["question"], prepared(), evaluation={**question, "own_answer": body.own_answer.strip()})
+        result = store.submit(auth[0]["id"], question["question"], prepared(body), evaluation={**question, "own_answer": body.own_answer.strip(), "assignment_id": body.assignment_id})
         runner.wake.set()
         return result
 
@@ -297,6 +314,8 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
                       "own_answer": attempt["own_answer"], "agent_answer": store.turn(db, attempt["turn_id"])["result"]["answer"],
                       "scores": body.scores.model_dump(), "note": body.note.strip(), "created_at": now(), "username": auth[0]["username"]}
             db.execute("INSERT INTO ratings VALUES (?,?,?,?,?)", (result["id"], body.attempt_id, auth[0]["id"], encoded(result), result["created_at"]))
+            for issue in body.issues:
+                workflow.add_issue(db, auth[0]["id"], "evaluation", attempt["turn_id"], body.attempt_id, issue)
             return result
 
     @app.get("/api/ratings/mine", response_model=list[m.Rating])
@@ -313,13 +332,15 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     def create_user(body: m.NewUser, auth=Depends(admin)):
         if not body.display_name.strip():
             raise APIError(400, "显示名不能为空。")
+        if body.evaluation_reserve > body.daily_limit:
+            raise APIError(400, "测评预留不能超过每日上限。")
         with store.connection(write=True) as db:
             if db.execute("SELECT 1 FROM users WHERE username=?", (body.username,)).fetchone():
                 raise APIError(409, "用户名已存在。")
             if db.execute("SELECT count(*) FROM users").fetchone()[0] >= 10:
                 raise APIError(409, "最多可创建 10 个账号。")
             user_id = uid()
-            db.execute("INSERT INTO users(id,username,display_name,role,daily_limit) VALUES (?,?,?,?,?)", (user_id, body.username, body.display_name.strip(), body.role, body.daily_limit))
+            db.execute("INSERT INTO users(id,username,display_name,role,daily_limit,evaluation_reserve) VALUES (?,?,?,?,?,?)", (user_id, body.username, body.display_name.strip(), body.role, body.daily_limit, body.evaluation_reserve))
             token, expires = store.invite(db, user_id)
             return {"user": store.public_user(db, store.user(db, user_id)), **invite_link(token, expires)}
 
@@ -332,6 +353,8 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
             if not user:
                 raise APIError(404, "未找到该成员。")
+            if patch.get("evaluation_reserve", user["evaluation_reserve"]) > patch.get("daily_limit", user["daily_limit"]):
+                raise APIError(400, "测评预留不能超过每日上限。")
             for key, value in patch.items():
                 db.execute(f"UPDATE users SET {key}=? WHERE id=?", (value, user_id))
             if patch.get("disabled") or "role" in patch:
@@ -360,6 +383,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
         values = body.model_dump(mode="json")
         with store.connection(write=True) as db:
             db.execute("UPDATE settings SET value=? WHERE id=1", (encoded(values),))
+            workflow.active_bank(db)
         runner.wake.set()
         return values
 
@@ -386,7 +410,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
     def usage(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), auth=Depends(admin)):
         with store.connection() as db:
             settings = store.settings(db)
-            jobs = [dict(row) for row in db.execute("SELECT id,user_id,quota_day FROM jobs WHERE substr(quota_day,1,7)=?", (month,))]
+            jobs = [dict(row) for row in db.execute("SELECT id,user_id,quota_day,config FROM jobs WHERE substr(quota_day,1,7)=?", (month,))]
             calls = [dict(row) for row in db.execute("SELECT c.* FROM model_calls c JOIN jobs j ON c.job_id=j.id WHERE substr(j.quota_day,1,7)=?", (month,))]
             members = [dict(row) for row in db.execute("SELECT id,username,display_name FROM users ORDER BY rowid")]
         def totals(selected):
@@ -397,11 +421,15 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
                 result[key] = sum(row[key] for row in records) if all(row[key] is not None for row in records) else None
             incoming, outgoing = result["input_tokens"], result["output_tokens"]
             in_price, out_price = settings["input_price_per_million_yuan"], settings["output_price_per_million_yuan"]
-            result["cost_yuan"] = float((Decimal(incoming) * Decimal(str(in_price)) + Decimal(outgoing) * Decimal(str(out_price))) / Decimal(1000000)) if all(value is not None for value in (incoming, outgoing, in_price, out_price)) else None
+            # Prices describe the configured default model, never other models.
+            priced = all(json.loads(job["config"])["model"] == model for job in selected)
+            result["cost_yuan"] = float((Decimal(incoming) * Decimal(str(in_price)) + Decimal(outgoing) * Decimal(str(out_price))) / Decimal(1000000)) if priced and all(value is not None for value in (incoming, outgoing, in_price, out_price)) else None
             return result
         return {"month": month, "total": totals(jobs),
                 "by_user": [{"user_id": user["id"], "username": user["username"], "display_name": user["display_name"], **totals([j for j in jobs if j["user_id"] == user["id"]])} for user in members],
                 "by_day": [{"date": day, **totals([j for j in jobs if j["quota_day"] == day])} for day in sorted({j["quota_day"] for j in jobs})]}
+
+    register_workflow(app, workflow, identity, admin)
 
     @app.get("/{path:path}", include_in_schema=False)
     def frontend(path: str):

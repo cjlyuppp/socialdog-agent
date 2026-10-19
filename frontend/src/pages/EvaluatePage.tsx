@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { EvalAttempt, EvalCategory, EvalQuestion, NumberVerdict, RatingScores } from "../api/types";
+import type { EvalAttempt, EvalCategory, VersionedQuestion, IssueDraft, NumberVerdict, RatingScores } from "../api/types";
+import { FeedbackButton, IssueListEditor } from "../components/Feedback";
+import { EFFORT_LABELS, ModelPicker, useModelSelection } from "../components/ModelPicker";
+import type { ReasoningEffort } from "../api/types";
 import { EvidenceList, GroundingWarning, JobProgress, Markdown } from "../components/answer";
 import { Page } from "../components/Layout";
 import { Icon } from "../components/Icon";
@@ -48,16 +51,18 @@ function QuestionPicker() {
   );
 }
 
-function OwnAnswerStep({ question }: { question: EvalQuestion }) {
+function OwnAnswerStep({ question, assignmentId }: { question: VersionedQuestion; assignmentId?: string }) {
   const [answer, setAnswer] = useState("");
   const [, setParams] = useSearchParams();
   const navigate = useNavigate();
   const client = useQueryClient();
   const me = useMe().data!;
+  const modelControls = useModelSelection();
   const run = useMutation({
-    mutationFn: () => api.runEval(question.id, answer.trim()),
+    mutationFn: () => api.runEval(question.id, answer.trim(), question.bank_version_id, assignmentId, modelControls.selection),
     onSuccess: (attempt) => {
       client.invalidateQueries({ queryKey: ME_KEY });
+      client.invalidateQueries({ queryKey: ["my-assignments"] });
       navigate(`/evaluate/${attempt.id}`);
     },
   });
@@ -81,8 +86,8 @@ function OwnAnswerStep({ question }: { question: EvalQuestion }) {
         </Field>
         {(blocked || run.error) && <div className="mt-3"><Notice>{run.error ? errorText(run.error) : blocked}</Notice></div>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-xs text-muted">消耗 1 次提问额度</span>
-          <Button variant="primary" disabled={!answer.trim() || !!blocked || run.isPending} onClick={() => run.mutate()}>
+          <ModelPicker controls={modelControls} disabled={run.isPending} />
+          <Button variant="primary" disabled={!modelControls.selection || !answer.trim() || !!blocked || run.isPending} onClick={() => run.mutate()}>
             {run.isPending ? "正在提交…" : "提交答案并对照"}
           </Button>
         </div>
@@ -95,11 +100,13 @@ function RatingForm({ attempt }: { attempt: EvalAttempt }) {
   const client = useQueryClient();
   const [scores, setScores] = useState<Partial<RatingScores>>({});
   const [note, setNote] = useState("");
+  const [issues, setIssues] = useState<IssueDraft[]>([]);
   const rate = useMutation({
-    mutationFn: () => api.rate({ attempt_id: attempt.id, scores: scores as RatingScores, note: note.trim() }),
+    mutationFn: () => api.rate({ attempt_id: attempt.id, scores: scores as RatingScores, note: note.trim(), issues }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["attempt", attempt.id] });
       client.invalidateQueries({ queryKey: ["ratings"] });
+      client.invalidateQueries({ queryKey: ["my-feedback"] });
     },
   });
   const complete = scores.numbers && SCALES.every((s) => scores[s.key]);
@@ -140,9 +147,10 @@ function RatingForm({ attempt }: { attempt: EvalAttempt }) {
         </fieldset>
       ))}
       <Field label="备注（可选）"><Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="哪里答错了、漏说了什么、口径哪里不清楚" /></Field>
+      <IssueListEditor issues={issues} onChange={setIssues} evidence={attempt.turn.result?.evidence ?? []} />
       {rate.error && <div className="mt-3"><Notice>{errorText(rate.error)}</Notice></div>}
       <div className="mt-4 flex justify-end">
-        <Button variant="primary" disabled={!complete || rate.isPending} onClick={() => rate.mutate()}>提交打分</Button>
+        <Button variant="primary" disabled={!complete || issues.some(i => !i.description.trim()) || rate.isPending} onClick={() => rate.mutate()}>提交打分</Button>
       </div>
     </Card>
   );
@@ -151,7 +159,6 @@ function RatingForm({ attempt }: { attempt: EvalAttempt }) {
 function AttemptView({ attemptId }: { attemptId: string }) {
   const client = useQueryClient();
   const attempt = useQuery({ queryKey: ["attempt", attemptId], queryFn: () => api.attempt(attemptId) });
-  const questions = useQuery({ queryKey: ["eval-questions"], queryFn: api.evalQuestions });
   const running = attempt.data?.turn.status === "running";
   const job = useJob(running ? attempt.data?.job_id : null);
 
@@ -164,7 +171,7 @@ function AttemptView({ attemptId }: { attemptId: string }) {
 
   if (attempt.isPending) return <Spinner />;
   if (attempt.error) return <Notice>{errorText(attempt.error)}</Notice>;
-  const question = questions.data?.find((q) => q.id === attempt.data.question_id);
+  const question = attempt.data.question_snapshot as unknown as VersionedQuestion | null;
   const { turn } = attempt.data;
 
   return (
@@ -189,6 +196,8 @@ function AttemptView({ attemptId }: { attemptId: string }) {
                 <summary className="cursor-pointer text-sm text-muted underline">查看依据 · {turn.result.evidence.length}</summary>
                 <div className="mt-3"><EvidenceList evidence={turn.result.evidence} /></div>
               </details>
+              <div className="mt-4"><FeedbackButton turnId={turn.id} evidence={turn.result.evidence} attemptId={attempt.data.id} /></div>
+              <p className="mt-3 text-sm text-muted">{turn.result.model} · 思考强度 {EFFORT_LABELS[turn.result.reasoning_effort as ReasoningEffort] ?? "未记录"}</p>
             </>
           )}
         </Card>
@@ -208,7 +217,9 @@ export function EvaluatePage() {
   const { attemptId } = useParams();
   const [params] = useSearchParams();
   const questions = useQuery({ queryKey: ["eval-questions"], queryFn: api.evalQuestions });
-  const picked = questions.data?.find((q) => q.id === params.get("q"));
+  const assignments = useQuery({ queryKey: ["my-assignments"], queryFn: api.myAssignments, enabled: !!params.get("assignment") });
+  const assigned = assignments.data?.find(a => a.id === params.get("assignment"));
+  const picked = assigned?.question ?? questions.data?.find((q) => q.id === params.get("q"));
 
   return (
     <Page wide={!!attemptId}>
@@ -216,7 +227,7 @@ export function EvaluatePage() {
       <ol className="eval-step" aria-label="测评步骤">
         {["选择题目", "独立作答", "对照评分"].map((step, index) => <li key={step} className={(attemptId ? 2 : picked ? 1 : 0) === index ? "is-active" : ""} aria-current={(attemptId ? 2 : picked ? 1 : 0) === index ? "step" : undefined}>{index + 1}. {step}</li>)}
       </ol>
-      {attemptId ? <AttemptView attemptId={attemptId} /> : picked ? <OwnAnswerStep key={picked.id} question={picked} /> : <QuestionPicker />}
+      {attemptId ? <AttemptView attemptId={attemptId} /> : params.get("assignment") && assignments.isPending ? <Spinner /> : params.get("assignment") && !assigned ? <Notice>待办不存在或无法加载，请返回我的待办重试。</Notice> : assigned?.attempt_id ? <Link className="button-link" to={`/evaluate/${assigned.attempt_id}`}>查看已提交的答案</Link> : picked ? <OwnAnswerStep key={`${picked.bank_version_id}-${picked.id}`} question={picked} assignmentId={assigned?.id} /> : <QuestionPicker />}
     </Page>
   );
 }
