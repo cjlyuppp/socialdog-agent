@@ -3,7 +3,9 @@ from starlette.responses import JSONResponse
 
 
 def request_body_limit(path):
-    return 2_000_000 if path == '/api/admin/question-bank/draft' else 65536
+    # Bulk forms must accommodate their validated Unicode text and issue counts.
+    return {'/api/admin/question-bank/draft': 2_000_000,
+            '/api/ratings': 1_000_000}.get(path, 65536)
 
 
 class RequestBodyLimit:

@@ -145,6 +145,18 @@ class APITests(unittest.TestCase):
         body = json.dumps({'username': 'admin', 'password': PASSWORD}).encode()
         self.assertEqual(self.client.post('/api/auth/login', content=iter([body[:10], body[10:]]), headers={'Content-Type': 'application/json'}).status_code, 200)
 
+    def test_full_size_structured_feedback_fits_the_rating_request_limit(self):
+        response = self.client.post('/api/eval/questions/q-data/run', json={'own_answer': '独立答案'})
+        self.assertEqual(response.status_code, 202)
+        attempt = response.json()
+        self.assertEqual(self.finished(attempt['job_id'])['status'], 'ok')
+        issue = {'stage': 'reasoning', 'description': '错' * 4000, 'correct_approach': '改' * 4000, 'evidence_refs': []}
+        rating = {'attempt_id': attempt['id'], 'scores': {'numbers': 'partial', 'reasoning': 3, 'definitions': 4, 'limitations': 4}, 'issues': [issue] * 20}
+        self.assertEqual(self.client.post('/api/ratings', json=rating).status_code, 201)
+        self.assertEqual(len(self.client.get('/api/feedback/mine').json()), 20)
+        oversized = self.client.post('/api/ratings', content=iter([b'x' * 1_000_000, b'x']), headers={'Content-Type': 'application/json'})
+        self.assertEqual(oversized.status_code, 413)
+
     def test_secure_cookie_opaque_session_and_password_hash(self):
         response = self.client.post("/api/auth/login", json={"username": "admin", "password": PASSWORD})
         self.assertEqual(response.status_code, 200)
