@@ -133,6 +133,18 @@ class APITests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
+    def test_chunked_request_size_limits_apply_before_parsing_and_authentication(self):
+        for extra in ({}, {'Content-Length': '0'}):
+            response = self.client.post('/api/auth/login', content=iter([b'{"username":"', b'x' * 65536, b'"}']), headers={'Content-Type': 'application/json', **extra})
+            self.assertEqual(response.status_code, 413)
+        oversized = self.client.put('/api/admin/question-bank/draft', content=iter([b'x' * 1_000_001, b'x' * 1_000_001]), headers={'Content-Type': 'application/json'})
+        self.assertEqual(oversized.status_code, 413)
+        draft = {'revision': 0, 'name': '完整中文题库', 'cutoff_T': '2023-03-15', 'threshold_N': 5,
+                 'questions': [{'id': f'q{i}', 'category': 'quality', 'title': '研究题', 'question': '研究问题' * 1000} for i in range(100)]}
+        self.assertEqual(self.client.put('/api/admin/question-bank/draft', json=draft).status_code, 200)
+        body = json.dumps({'username': 'admin', 'password': PASSWORD}).encode()
+        self.assertEqual(self.client.post('/api/auth/login', content=iter([body[:10], body[10:]]), headers={'Content-Type': 'application/json'}).status_code, 200)
+
     def test_secure_cookie_opaque_session_and_password_hash(self):
         response = self.client.post("/api/auth/login", json={"username": "admin", "password": PASSWORD})
         self.assertEqual(response.status_code, 200)

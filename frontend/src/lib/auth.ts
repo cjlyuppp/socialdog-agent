@@ -22,6 +22,8 @@ export function useMe() {
       }
     },
     staleTime: 30_000,
+    // A task can finish while its conversation is not mounted.
+    refetchInterval: query => query.state.data?.running_job_id ? 1500 : false,
   });
 }
 

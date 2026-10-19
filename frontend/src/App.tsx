@@ -52,7 +52,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Route>
       ) : (
-        <Route path="*" element={<Navigate to="/login" replace state={{ from: location.pathname }} />} />
+        <Route path="*" element={<Navigate to="/login" replace state={{ from: location.pathname + location.search + location.hash }} />} />
       )}
     </Routes></Suspense>
   );

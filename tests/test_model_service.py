@@ -129,6 +129,8 @@ class ModelServiceTests(unittest.TestCase):
         credentials.path.write_text('invalid json')
         with self.assertRaises(APIError):
             credentials.read()
+        credentials.save(KEY, 'actor')
+        self.assertEqual(credentials.read().key, KEY)
 
 
 class DeepSeekConnectionTests(unittest.TestCase):

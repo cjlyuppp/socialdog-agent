@@ -20,6 +20,7 @@ export function Markdown({ text }: { text: string }) {
         components={{
           table: ({ children }) => <div className="table-wrap"><table>{children}</table></div>,
           a: ({ children }) => <span className="underline decoration-dotted">{children}</span>,
+          img: ({ alt }) => alt ? <span>{alt}</span> : null,
         }}
       >
         {text}

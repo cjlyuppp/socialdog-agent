@@ -239,7 +239,7 @@ export function EvaluatePage() {
       <ol className="eval-step" aria-label="测评步骤">
         {["选择题目", "独立作答", "对照评分"].map((step, index) => <li key={step} className={(attemptId ? 2 : picked ? 1 : 0) === index ? "is-active" : ""} aria-current={(attemptId ? 2 : picked ? 1 : 0) === index ? "step" : undefined}>{index + 1}. {step}</li>)}
       </ol>
-      {attemptId ? <AttemptView attemptId={attemptId} /> : params.get("assignment") && assignments.isPending ? <Spinner /> : params.get("assignment") && !assigned ? <Notice>待办不存在或无法加载，请返回我的待办重试。</Notice> : assigned?.attempt_id ? <Link className="button-link" to={`/evaluate/${assigned.attempt_id}`}>查看已提交的答案</Link> : picked ? <OwnAnswerStep key={`${picked.bank_version_id}-${picked.id}`} question={picked} assignmentId={assigned?.id} /> : <QuestionPicker />}
+      {attemptId ? <AttemptView key={attemptId} attemptId={attemptId} /> : params.get("assignment") && assignments.isPending ? <Spinner /> : params.get("assignment") && !assigned ? <Notice>待办不存在或无法加载，请返回我的待办重试。</Notice> : assigned?.attempt_id ? <Link className="button-link" to={`/evaluate/${assigned.attempt_id}`}>查看已提交的答案</Link> : picked ? <OwnAnswerStep key={`${picked.bank_version_id}-${picked.id}`} question={picked} assignmentId={assigned?.id} /> : <QuestionPicker />}
     </Page>
   );
 }

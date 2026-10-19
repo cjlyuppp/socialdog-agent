@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException
 import chat_agent
 
 from . import models as m
+from .boundary import RequestBodyLimit, request_body_limit
 from .data import AgentData, ReferenceData, load_questions
 from .catalog import DataCatalog
 from .configuration import publish, register_configuration
@@ -109,6 +110,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
             lock.close()
 
     app = FastAPI(title="SocialDog Workspace", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(RequestBodyLimit)
     app.state.store, app.state.runner, app.state.source = store, runner, source
     app.state.reference = reference
     app.state.credentials = credentials
@@ -149,7 +151,7 @@ def create_app(config: ServerConfig, *, llm_factory=None, model_name=None):
                 return JSONResponse({"error": "不接受跨站请求。"}, status_code=403)
             length = request.headers.get("content-length", "0")
             # A bank contains many prompts; ordinary single submissions stay bounded.
-            limit = 2_000_000 if request.url.path == "/api/admin/question-bank/draft" else 65536
+            limit = request_body_limit(request.url.path)
             if not length.isdigit() or int(length) > limit:
                 return JSONResponse({"error": "请求内容过大。"}, status_code=413)
         response = await call_next(request)

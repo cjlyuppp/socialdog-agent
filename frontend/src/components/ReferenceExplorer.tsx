@@ -13,7 +13,12 @@ function downloadCsv(result: ReferenceResult) {
   const header = ["分组", "订单数", "明细数", "记录件数", "记录收款(元)", "记录成交(元)", "余额扣除(元)", "优惠券(元)", "截断后"];
   const rows = result.rows.map((r) => [r.group, r.order_count, r.line_count, r.recorded_quantity, r.recorded_receipt_yuan,
                                        r.recorded_deal_yuan, r.wallet_yuan, r.coupon_yuan, r.after_cutoff ? "是" : ""]);
-  const text = "﻿" + [header, ...rows].map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n");
+  const cell = (value: string | number) => {
+    // Quoting alone does not prevent spreadsheet formula execution.
+    const text = typeof value === "string" && (/^\s*[=+\-@]/.test(value) || /^[\t\r]/.test(value)) ? "'" + value : String(value);
+    return `"${text.replaceAll('"', '""')}"`;
+  };
+  const text = "﻿" + [header, ...rows].map(r => r.map(cell).join(",")).join("\n");
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
   link.download = `数据核对_${result.query.scope}_${result.query.by}.csv`;

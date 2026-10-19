@@ -103,23 +103,24 @@ export function ModelServiceEditor() {
   } });
   const busy = save.isPending || check.isPending || disable.isPending;
   if (settings.isPending) return <Spinner />;
-  if (settings.error) return <Notice>{errorText(settings.error)} <Button variant="ghost" onClick={() => settings.refetch()}>重新加载</Button></Notice>;
+  const configured = settings.data?.configured ?? false;
   return <div className="max-w-2xl space-y-7">
-    <div className="flex items-center justify-between gap-4 border-b border-line pb-5"><h2 className="text-xl font-semibold">模型服务</h2><Badge tone={settings.data.configured ? "ok" : "neutral"}>{settings.data.configured ? "已配置" : "未配置"}</Badge></div>
+    <div className="flex items-center justify-between gap-4 border-b border-line pb-5"><h2 className="text-xl font-semibold">模型服务</h2><Badge tone={configured && !settings.error ? "ok" : "neutral"}>{settings.error ? "状态不可用" : configured ? "已配置" : "未配置"}</Badge></div>
+    {settings.error && <Notice>{errorText(settings.error)} <Button variant="ghost" onClick={() => settings.refetch()}>重新加载</Button></Notice>}
     <div><h3 className="font-medium">DeepSeek</h3><p className="mt-2 text-sm leading-6 text-muted">研究对话和测评共用此 API Key。模型和思考强度由使用者在提问时选择。</p></div>
     <form className="space-y-5" onSubmit={event => { event.preventDefault(); check.reset(); disable.reset(); save.mutate(); }}>
-      <Field label={settings.data.configured ? "替换 API Key" : "API Key"} hint="保存前验证连接，成功后立即用于新任务。已保存的密钥不会回显。">
+      <Field label={configured ? "替换 API Key" : "API Key"} hint="保存前验证连接，成功后立即用于新任务。已保存的密钥不会回显。">
         <Input type="password" name="deepseek-api-key" autoComplete="off" autoCapitalize="none" spellCheck={false} required minLength={8} maxLength={256} disabled={busy} value={key}
-          onChange={event => { setKey(event.target.value); save.reset(); check.reset(); }} placeholder={settings.data.configured ? "输入新的 DeepSeek API Key" : "输入 DeepSeek API Key"} />
+          onChange={event => { setKey(event.target.value); save.reset(); check.reset(); }} placeholder={configured ? "输入新的 DeepSeek API Key" : "输入 DeepSeek API Key"} />
       </Field>
       <div className="flex flex-wrap gap-3"><Button type="submit" variant="primary" disabled={busy || key.trim().length < 8}>{save.isPending ? "正在验证并保存…" : "验证并保存"}</Button>
-        <Button disabled={busy || !settings.data.configured || !!key} onClick={() => { save.reset(); disable.reset(); check.mutate(); }}>{check.isPending ? "正在检查…" : "验证当前连接"}</Button></div>
+        <Button disabled={busy || !configured || !!key} onClick={() => { save.reset(); disable.reset(); check.mutate(); }}>{check.isPending ? "正在检查…" : "验证当前连接"}</Button></div>
     </form>
     {(save.error || check.error || disable.error) && <Notice>{errorText(save.error ?? check.error ?? disable.error)}</Notice>}
     {save.isSuccess && <Notice tone="ok">已保存，新的任务将使用此 API Key。</Notice>}
     {check.isSuccess && <Notice tone="ok">DeepSeek 连接验证通过。</Notice>}
     {disable.isSuccess && <Notice tone="neutral">模型服务已停用。保存新的 API Key 后可以继续提问。</Notice>}
-    {settings.data.updated_at && <p className="text-sm text-muted">最近更新：{dateTime(settings.data.updated_at)}</p>}
-    {settings.data.configured && <div className="border-t border-line pt-5"><Button variant="danger" disabled={busy} onClick={() => { if (confirm("停用模型服务后，将暂停新的研究对话和测评。是否停用？")) disable.mutate(); }}>停用模型服务</Button></div>}
+    {settings.data?.updated_at && <p className="text-sm text-muted">最近更新：{dateTime(settings.data.updated_at)}</p>}
+    {configured && <div className="border-t border-line pt-5"><Button variant="danger" disabled={busy} onClick={() => { if (confirm("停用模型服务后，将暂停新的研究对话和测评。是否停用？")) disable.mutate(); }}>停用模型服务</Button></div>}
   </div>;
 }

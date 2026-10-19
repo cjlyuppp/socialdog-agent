@@ -2,11 +2,13 @@
 
 技术栈：React 19 + Vite + TypeScript + Tailwind CSS 4；数据请求用 TanStack Query。本地可使用 MSW 合成数据开发，正式流程使用 FastAPI/SQLite 后端。
 
+开发与构建使用 Node.js 22.12 以上（CI 使用 Node 22）。
+
 ## 开发
 
 ```sh
 cd frontend
-npm install
+npm ci
 npm run dev          # http://localhost:5173 ，默认使用模拟后端
 ```
 
@@ -24,8 +26,9 @@ VITE_USE_MOCK=0 VITE_API_PROXY=http://127.0.0.1:8000 npm run dev
 
 ```sh
 npm run typecheck
+npm audit --audit-level=high
 npm test             # 用 msw/node 跑接口契约测试和页面冒烟测试
-npm run build        # 输出到 dist/，由 Caddy 直接提供
+npm run build        # 输出到 dist/，由 FastAPI 或同源反向代理提供
 ```
 
 生产构建不包含模拟后端。
