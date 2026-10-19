@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+from socketserver import TCPServer
 import sqlite3
 import threading
 from urllib.parse import urlsplit
@@ -207,6 +208,11 @@ class ChatService:
 
 class LocalServer(ThreadingHTTPServer):
     daemon_threads = True
+
+    def server_bind(self):
+        # This server only binds a numeric loopback address; reverse DNS can block startup.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def __init__(self, port: int, service: ChatService):
         self.service = service

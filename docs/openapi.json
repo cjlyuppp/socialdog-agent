@@ -1,0 +1,2557 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SocialDog Workspace",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/me": {
+      "get": {
+        "summary": "Me",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Login",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/auth/invite/{token}": {
+      "get": {
+        "summary": "Invite",
+        "operationId": "invite_api_auth_invite__token__get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/invite/accept": {
+      "post": {
+        "summary": "Accept",
+        "operationId": "accept_api_auth_invite_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "Status",
+        "operationId": "status_api_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "summary": "Sessions",
+        "operationId": "sessions_api_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Session"
+                  },
+                  "type": "array",
+                  "title": "Response Sessions Api Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "New Session",
+        "operationId": "new_session_api_sessions_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "summary": "Session Detail",
+        "operationId": "session_detail_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/messages": {
+      "post": {
+        "summary": "Ask",
+        "operationId": "ask_api_sessions__session_id__messages_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Submitted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "summary": "Job",
+        "operationId": "job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/meta": {
+      "get": {
+        "summary": "Reference Meta",
+        "operationId": "reference_meta_api_reference_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceMeta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference/query": {
+      "get": {
+        "summary": "Reference Query",
+        "operationId": "reference_query_api_reference_query_get",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "baseline",
+                "all"
+              ],
+              "type": "string",
+              "default": "baseline",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "day",
+                "week",
+                "month",
+                "hour",
+                "weekday",
+                "category",
+                "product",
+                "delivery",
+                "payment",
+                "status",
+                "type"
+              ],
+              "type": "string",
+              "default": "month",
+              "title": "By"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/eval/questions": {
+      "get": {
+        "summary": "Eval Questions",
+        "operationId": "eval_questions_api_eval_questions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalQuestion"
+                  },
+                  "type": "array",
+                  "title": "Response Eval Questions Api Eval Questions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/eval/questions/{question_id}/run": {
+      "post": {
+        "summary": "Eval Run",
+        "operationId": "eval_run_api_eval_questions__question_id__run_post",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Question Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalAttempt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/eval/attempts/{attempt_id}": {
+      "get": {
+        "summary": "Eval Attempt",
+        "operationId": "eval_attempt_api_eval_attempts__attempt_id__get",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attempt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalAttempt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ratings": {
+      "post": {
+        "summary": "Rate",
+        "operationId": "rate_api_ratings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RatingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rating"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ratings/mine": {
+      "get": {
+        "summary": "Ratings Mine",
+        "operationId": "ratings_mine_api_ratings_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Rating"
+                  },
+                  "type": "array",
+                  "title": "Response Ratings Mine Api Ratings Mine Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "summary": "Users",
+        "operationId": "users_api_admin_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminUser"
+                  },
+                  "type": "array",
+                  "title": "Response Users Api Admin Users Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create User",
+        "operationId": "create_user_api_admin_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedUser"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "patch": {
+        "summary": "Update User",
+        "operationId": "update_user_api_admin_users__user_id__patch",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUser"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/invite": {
+      "post": {
+        "summary": "Reinvite",
+        "operationId": "reinvite_api_admin_users__user_id__invite_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLink"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/settings": {
+      "get": {
+        "summary": "Get Settings",
+        "operationId": "get_settings_api_admin_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save Settings",
+        "operationId": "save_settings_api_admin_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ratings": {
+      "get": {
+        "summary": "Ratings All",
+        "operationId": "ratings_all_api_admin_ratings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Rating"
+                  },
+                  "type": "array",
+                  "title": "Response Ratings All Api Admin Ratings Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ratings/export.csv": {
+      "get": {
+        "summary": "Ratings Export",
+        "operationId": "ratings_export_api_admin_ratings_export_csv_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/usage": {
+      "get": {
+        "summary": "Usage",
+        "operationId": "usage_api_admin_usage_get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptInvite": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 20,
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 10,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "AcceptInvite"
+      },
+      "AdminUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "researcher"
+            ],
+            "title": "Role"
+          },
+          "daily_limit": {
+            "type": "integer",
+            "title": "Daily Limit"
+          },
+          "disabled": {
+            "type": "boolean",
+            "title": "Disabled"
+          },
+          "used_today": {
+            "type": "integer",
+            "title": "Used Today"
+          },
+          "last_active_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active At"
+          },
+          "invite_pending": {
+            "type": "boolean",
+            "title": "Invite Pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "role",
+          "daily_limit",
+          "disabled",
+          "used_today",
+          "last_active_at",
+          "invite_pending"
+        ],
+        "title": "AdminUser"
+      },
+      "AgentResult": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "snapshot_versions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Snapshot Versions"
+          },
+          "grounding": {
+            "$ref": "#/components/schemas/Grounding"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "evidence",
+          "snapshot_versions",
+          "grounding",
+          "model",
+          "request_id",
+          "usage"
+        ],
+        "title": "AgentResult"
+      },
+      "CreatedUser": {
+        "properties": {
+          "invite_url": {
+            "type": "string",
+            "title": "Invite Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AdminUser"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_url",
+          "expires_at",
+          "user"
+        ],
+        "title": "CreatedUser"
+      },
+      "DataStatus": {
+        "properties": {
+          "dataset_version": {
+            "type": "string",
+            "title": "Dataset Version"
+          },
+          "cutoff_date": {
+            "type": "string",
+            "title": "Cutoff Date"
+          },
+          "agent_observation_start": {
+            "type": "string",
+            "title": "Agent Observation Start"
+          },
+          "agent_observation_end": {
+            "type": "string",
+            "title": "Agent Observation End"
+          },
+          "min_orders_per_group": {
+            "type": "integer",
+            "title": "Min Orders Per Group"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_version",
+          "cutoff_date",
+          "agent_observation_start",
+          "agent_observation_end",
+          "min_orders_per_group",
+          "model"
+        ],
+        "title": "DataStatus"
+      },
+      "DayUsage": {
+        "properties": {
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "questions": {
+            "type": "integer",
+            "title": "Questions"
+          },
+          "cost_yuan": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Yuan"
+          },
+          "date": {
+            "type": "string",
+            "title": "Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "questions",
+          "cost_yuan",
+          "date"
+        ],
+        "title": "DayUsage"
+      },
+      "EvalAttempt": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "own_answer": {
+            "type": "string",
+            "title": "Own Answer"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/Turn"
+          },
+          "rated": {
+            "type": "boolean",
+            "title": "Rated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "question_id",
+          "own_answer",
+          "job_id",
+          "turn",
+          "rated"
+        ],
+        "title": "EvalAttempt"
+      },
+      "EvalQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "time_series",
+              "product",
+              "price_event",
+              "quality",
+              "unavailable",
+              "out_of_sample"
+            ],
+            "title": "Category"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "reference_hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "title",
+          "question"
+        ],
+        "title": "EvalQuestion"
+      },
+      "Evidence": {
+        "properties": {
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "arguments": {
+            "type": "string",
+            "title": "Arguments"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool",
+          "call_id",
+          "arguments",
+          "result"
+        ],
+        "title": "Evidence"
+      },
+      "Grounding": {
+        "properties": {
+          "ungrounded_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ungrounded Numbers"
+          },
+          "repair_attempted": {
+            "type": "boolean",
+            "title": "Repair Attempted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ungrounded_numbers",
+          "repair_attempted"
+        ],
+        "title": "Grounding"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InviteInfo": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "display_name",
+          "expires_at"
+        ],
+        "title": "InviteInfo"
+      },
+      "InviteLink": {
+        "properties": {
+          "invite_url": {
+            "type": "string",
+            "title": "Invite Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_url",
+          "expires_at"
+        ],
+        "title": "InviteLink"
+      },
+      "Job": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "ok",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "turn_id": {
+            "type": "string",
+            "title": "Turn Id"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "session_id",
+          "turn_id",
+          "queue_position",
+          "events",
+          "error"
+        ],
+        "title": "Job"
+      },
+      "Login": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Login"
+      },
+      "Me": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "researcher"
+            ],
+            "title": "Role"
+          },
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/Quota"
+          },
+          "running_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Running Job Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "role",
+          "csrf_token",
+          "quota",
+          "running_job_id"
+        ],
+        "title": "Me"
+      },
+      "NewUser": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{2,32}$",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "researcher"
+            ],
+            "title": "Role",
+            "default": "researcher"
+          },
+          "daily_limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Daily Limit",
+            "default": 30
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "display_name"
+        ],
+        "title": "NewUser"
+      },
+      "OwnAnswer": {
+        "properties": {
+          "own_answer": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Own Answer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "own_answer"
+        ],
+        "title": "OwnAnswer"
+      },
+      "ProgressEvent": {
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "source",
+              "model",
+              "tool",
+              "tool_complete",
+              "verify",
+              "complete"
+            ],
+            "title": "Phase"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phase",
+          "text",
+          "at"
+        ],
+        "title": "ProgressEvent"
+      },
+      "QuestionInput": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "QuestionInput"
+      },
+      "Quota": {
+        "properties": {
+          "daily_limit": {
+            "type": "integer",
+            "title": "Daily Limit"
+          },
+          "used_today": {
+            "type": "integer",
+            "title": "Used Today"
+          },
+          "remaining_today": {
+            "type": "integer",
+            "title": "Remaining Today"
+          },
+          "site_remaining_today": {
+            "type": "integer",
+            "title": "Site Remaining Today"
+          }
+        },
+        "type": "object",
+        "required": [
+          "daily_limit",
+          "used_today",
+          "remaining_today",
+          "site_remaining_today"
+        ],
+        "title": "Quota"
+      },
+      "Rating": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "attempt_id": {
+            "type": "string",
+            "title": "Attempt Id"
+          },
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "question_title": {
+            "type": "string",
+            "title": "Question Title"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "own_answer": {
+            "type": "string",
+            "title": "Own Answer"
+          },
+          "agent_answer": {
+            "type": "string",
+            "title": "Agent Answer"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/RatingScores"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "attempt_id",
+          "question_id",
+          "question_title",
+          "question",
+          "own_answer",
+          "agent_answer",
+          "scores",
+          "note",
+          "created_at",
+          "username"
+        ],
+        "title": "Rating"
+      },
+      "RatingInput": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "title": "Attempt Id"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/RatingScores"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "scores"
+        ],
+        "title": "RatingInput"
+      },
+      "RatingScores": {
+        "properties": {
+          "numbers": {
+            "type": "string",
+            "enum": [
+              "correct",
+              "partial",
+              "wrong",
+              "not_applicable"
+            ],
+            "title": "Numbers"
+          },
+          "reasoning": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Reasoning"
+          },
+          "definitions": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Definitions"
+          },
+          "limitations": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Limitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "numbers",
+          "reasoning",
+          "definitions",
+          "limitations"
+        ],
+        "title": "RatingScores"
+      },
+      "ReferenceHint": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "baseline",
+                  "all"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "day",
+                  "week",
+                  "month",
+                  "hour",
+                  "weekday",
+                  "category",
+                  "product",
+                  "delivery",
+                  "payment",
+                  "status",
+                  "type"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReferenceHint"
+      },
+      "ReferenceMeta": {
+        "properties": {
+          "dataset_version": {
+            "type": "string",
+            "title": "Dataset Version"
+          },
+          "cutoff_date": {
+            "type": "string",
+            "title": "Cutoff Date"
+          },
+          "observation_start": {
+            "type": "string",
+            "title": "Observation Start"
+          },
+          "observation_end": {
+            "type": "string",
+            "title": "Observation End"
+          },
+          "groups": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "products": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Products"
+          },
+          "can_view_after_cutoff": {
+            "type": "boolean",
+            "title": "Can View After Cutoff"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_version",
+          "cutoff_date",
+          "observation_start",
+          "observation_end",
+          "groups",
+          "products",
+          "can_view_after_cutoff"
+        ],
+        "title": "ReferenceMeta"
+      },
+      "ReferenceQuery": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "baseline",
+              "all"
+            ],
+            "title": "Scope",
+            "default": "baseline"
+          },
+          "by": {
+            "type": "string",
+            "enum": [
+              "all",
+              "day",
+              "week",
+              "month",
+              "hour",
+              "weekday",
+              "category",
+              "product",
+              "delivery",
+              "payment",
+              "status",
+              "type"
+            ],
+            "title": "By",
+            "default": "month"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReferenceQuery"
+      },
+      "ReferenceResult": {
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/ReferenceQuery"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "group_order_counts_additive": {
+            "type": "boolean",
+            "title": "Group Order Counts Additive"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "rows",
+          "group_order_counts_additive",
+          "notes"
+        ],
+        "title": "ReferenceResult"
+      },
+      "ReferenceRow": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "order_count": {
+            "type": "integer",
+            "title": "Order Count"
+          },
+          "line_count": {
+            "type": "integer",
+            "title": "Line Count"
+          },
+          "recorded_quantity": {
+            "type": "integer",
+            "title": "Recorded Quantity"
+          },
+          "recorded_receipt_yuan": {
+            "type": "number",
+            "title": "Recorded Receipt Yuan"
+          },
+          "recorded_deal_yuan": {
+            "type": "number",
+            "title": "Recorded Deal Yuan"
+          },
+          "wallet_yuan": {
+            "type": "number",
+            "title": "Wallet Yuan"
+          },
+          "coupon_yuan": {
+            "type": "number",
+            "title": "Coupon Yuan"
+          },
+          "after_cutoff": {
+            "type": "boolean",
+            "title": "After Cutoff"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "order_count",
+          "line_count",
+          "recorded_quantity",
+          "recorded_receipt_yuan",
+          "recorded_deal_yuan",
+          "wallet_yuan",
+          "coupon_yuan",
+          "after_cutoff"
+        ],
+        "title": "ReferenceRow"
+      },
+      "Session": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Session"
+      },
+      "SessionDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "type": "array",
+            "title": "Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at",
+          "turns"
+        ],
+        "title": "SessionDetail"
+      },
+      "SiteSettings": {
+        "properties": {
+          "site_daily_limit": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Site Daily Limit",
+            "default": 200
+          },
+          "min_orders_per_group": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Min Orders Per Group",
+            "default": 5
+          },
+          "cutoff_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Cutoff Date"
+          },
+          "input_price_per_million_yuan": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Price Per Million Yuan"
+          },
+          "output_price_per_million_yuan": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Price Per Million Yuan"
+          },
+          "max_concurrent_jobs": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent Jobs",
+            "default": 3
+          },
+          "per_user_concurrent_jobs": {
+            "type": "integer",
+            "const": 1,
+            "title": "Per User Concurrent Jobs",
+            "default": 1
+          },
+          "allow_post_cutoff_reference_after_submit": {
+            "type": "boolean",
+            "const": false,
+            "title": "Allow Post Cutoff Reference After Submit",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cutoff_date"
+        ],
+        "title": "SiteSettings"
+      },
+      "Submitted": {
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/Turn"
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn",
+          "job"
+        ],
+        "title": "Submitted"
+      },
+      "Turn": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "ok",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "question",
+          "status",
+          "created_at",
+          "job_id",
+          "result",
+          "error"
+        ],
+        "title": "Turn"
+      },
+      "Usage": {
+        "properties": {
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "Usage"
+      },
+      "UsageLine": {
+        "properties": {
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "questions": {
+            "type": "integer",
+            "title": "Questions"
+          },
+          "cost_yuan": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Yuan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "questions",
+          "cost_yuan"
+        ],
+        "title": "UsageLine"
+      },
+      "UsageReport": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "total": {
+            "$ref": "#/components/schemas/UsageLine"
+          },
+          "by_user": {
+            "items": {
+              "$ref": "#/components/schemas/UserUsage"
+            },
+            "type": "array",
+            "title": "By User"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DayUsage"
+            },
+            "type": "array",
+            "title": "By Day"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "total",
+          "by_user",
+          "by_day"
+        ],
+        "title": "UsageReport"
+      },
+      "UserPatch": {
+        "properties": {
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "admin",
+                  "researcher"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "daily_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 500.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Limit"
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UserPatch"
+      },
+      "UserUsage": {
+        "properties": {
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "questions": {
+            "type": "integer",
+            "title": "Questions"
+          },
+          "cost_yuan": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Yuan"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "questions",
+          "cost_yuan",
+          "user_id",
+          "username",
+          "display_name"
+        ],
+        "title": "UserUsage"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

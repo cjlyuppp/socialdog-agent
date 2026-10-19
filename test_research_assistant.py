@@ -125,5 +125,89 @@ class ResearchToolsTest(unittest.TestCase):
             self.assertTrue(all(a["statistical_tests_performed"] == 0 for a in audits))
 
 
+
+class TimeSeriesAndProductTest(unittest.TestCase):
+    """Day/week/month series, tool-computed exposure, and item-level aggregation."""
+
+    def setUp(self):
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.executescript(research.SCHEMA)
+        orders, details = [], []
+        # 2026-10-01 (Thu) .. 2026-10-14; no orders on Monday 10-05; 25 members per day.
+        for day in [d for d in range(1, 15) if d != 5]:
+            for i in range(25):
+                number = f"o{day}_{i}"
+                orders.append(row(f"m{i}", 下单时间=datetime(2026, 10, day, 12), 匿名订单编号=number,
+                                  优惠券减免=1 if i < 5 else 0))
+                details.append({"匿名订单编号": number, "历史商品名称": "美式" if i % 5 == 0 else "拿铁",
+                                "数量": 2, "系统支付净额": 10, "明细应付总额": 12, "明细已退金额": 2})
+        details.append({"匿名订单编号": "missing", "历史商品名称": "孤儿明细", "数量": 1})
+        records = [research.normalized_order(r, b"k" * 32) for r in orders]
+        items, self.report = research.normalized_items(details, orders, records)
+        self.connection.executemany(research.INSERT, records)
+        self.connection.executemany(research.INSERT_ITEM, items)
+
+    def tearDown(self):
+        self.connection.close()
+
+    def test_weekday_exposure_is_computed_not_estimated(self):
+        result = research.query_aggregate(self.connection, by="weekday")
+        monday = next(r for r in result["rows"] if r["group"] == 1)
+        self.assertEqual((monday["days_in_scope"], monday["days_with_orders"]), (2, 1))
+        self.assertEqual(monday["orders_per_day_with_orders"], 25.0)
+        sunday = next(r for r in result["rows"] if r["group"] == 7)
+        self.assertEqual((sunday["days_in_scope"], sunday["days_with_orders"]), (2, 2))
+
+    def test_week_and_month_flag_partial_periods(self):
+        weeks = research.query_aggregate(self.connection, by="week")["rows"]
+        self.assertEqual([w["group"] for w in weeks], ["2026-09-28", "2026-10-05", "2026-10-12"])
+        self.assertEqual([w["period_complete"] for w in weeks], [False, True, False])
+        self.assertEqual(weeks[0]["days_in_scope"], 4)
+        month = research.query_aggregate(self.connection, by="month")["rows"][0]
+        self.assertEqual((month["group"], month["days_in_scope"], month["days_with_orders"]), ("2026-10", 14, 13))
+        self.assertFalse(month["period_complete"])
+
+    def test_day_series_counts_suppressed_groups_without_details(self):
+        self.connection.execute(research.INSERT, research.normalized_order(
+            row("lonely", 下单时间=datetime(2026, 10, 5, 9)), b"k" * 32))
+        result = research.query_aggregate(self.connection, by="day")
+        self.assertEqual(result["suppressed_group_count"], 1)
+        self.assertNotIn("2026-10-05", json.dumps(result))
+
+    def test_coupon_use_is_descriptive_with_caveat(self):
+        result = research.query_aggregate(self.connection, by="coupon_use")
+        self.assertEqual({r["group"] for r in result["rows"]}, {"未使用优惠券"})
+        self.assertEqual(result["suppressed_group_count"], 1)  # Only 5 members ever used a coupon.
+        self.assertIn("不是优惠券效果", "".join(result["notes"]))
+
+    def test_product_aggregation_and_monthly_series(self):
+        self.assertEqual(self.report["item_lines_unlinked_or_unnamed"], 1)
+        self.assertEqual(self.report["matched_item_fields"]["product"], "历史商品名称")
+        result = research.query_products(self.connection)
+        latte = next(r for r in result["rows"] if r["product"] == "拿铁")
+        self.assertEqual(latte["recorded_quantity"], 13 * 20 * 2)
+        self.assertEqual(latte["net_per_unit_yuan"], 5.0)
+        self.assertEqual(latte["confirmed_members_lower_bound"], 20)
+        self.assertNotIn("美式", json.dumps(result, ensure_ascii=False))
+        monthly = research.query_products(self.connection, period="month", product="美式")
+        self.assertEqual(monthly["rows"], [])  # Only 5 members order 美式: below the threshold.
+        self.assertEqual(monthly["suppressed_group_count"], 1)
+
+    def test_product_tool_reports_missing_items(self):
+        empty = sqlite3.connect(":memory:")
+        empty.executescript(research.SCHEMA)
+        self.assertEqual(research.query_products(empty)["status"], "unavailable")
+        empty.close()
+
+    def test_as_of_drops_later_orders(self):
+        orders = [row(str(i), 下单时间=datetime(2026, 10, 1 + i % 3, 12)) for i in range(9)]
+        records = [research.normalized_order(r, b"k" * 32) for r in orders]
+        cutoff = datetime(2026, 10, 3, 23, 59, 59, tzinfo=research.TZ)
+        kept, kept_records, new_cutoff, info = research.apply_as_of(orders, records, cutoff, "2026-10-02")
+        self.assertEqual(len(kept_records), 6)
+        self.assertEqual(info["orders_removed_after_as_of"], 3)
+        self.assertEqual(new_cutoff.date().isoformat(), "2026-10-02")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,17 +9,18 @@ from pathlib import Path
 import sys
 
 import research_assistant as research
-from socialdog_agent import DeepSeekLLM, ResearchAgent, build_research_tools
+from socialdog_agent import DeepSeekLLM, ResearchAgent, build_history_tools, build_research_tools
+from socialdog_agent.history_tools import DEFAULT_MIN_ORDERS
 from socialdog_agent.llm import LLMError
 from socialdog_agent.feishu_source import FeishuSnapshotSource, DEFAULT_SYNC_STATE
 
-ROOT = Path(__file__).resolve().parent
+ROOT = research.ROOT
 ENV_FILE = ROOT / ".env"
-ENV_FIELDS = {"DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT"}
+ENV_FIELDS = {"DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT", "DEEPSEEK_REASONING_EFFORT"}
 
 
 def load_settings(path: Path = ENV_FILE) -> dict:
-    settings = {"DEEPSEEK_MODEL": "deepseek-flash", "DEEPSEEK_TIMEOUT": "45"}
+    settings = {"DEEPSEEK_MODEL": "deepseek-flash", "DEEPSEEK_TIMEOUT": "45", "DEEPSEEK_REASONING_EFFORT": "low"}
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -46,7 +47,8 @@ def configure() -> None:
         raise LLMError("API Key不能为空或包含空白字符。")
     settings = load_settings()
     contents = (f"DEEPSEEK_API_KEY={key}\nDEEPSEEK_MODEL={settings['DEEPSEEK_MODEL']}\n"
-                f"DEEPSEEK_TIMEOUT={settings['DEEPSEEK_TIMEOUT']}\n")
+                f"DEEPSEEK_TIMEOUT={settings['DEEPSEEK_TIMEOUT']}\n"
+                f"DEEPSEEK_REASONING_EFFORT={settings['DEEPSEEK_REASONING_EFFORT']}\n")
     fd = os.open(ENV_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -55,13 +57,27 @@ def configure() -> None:
     print("配置已保存。API Key不会写入分析日志。")
 
 
+def make_llm(settings: dict) -> DeepSeekLLM:
+    try:
+        timeout = float(settings["DEEPSEEK_TIMEOUT"])
+    except ValueError:
+        raise LLMError("DEEPSEEK_TIMEOUT必须为秒数。") from None
+    return DeepSeekLLM(api_key=settings.get("DEEPSEEK_API_KEY", ""), model=settings["DEEPSEEK_MODEL"],
+                       timeout=timeout, reasoning_effort=settings["DEEPSEEK_REASONING_EFFORT"])
+
+
 def print_answer(result: dict, show_evidence: bool = False) -> None:
     print(result["answer"])
     print("\n[复核] 快照：" + ("、".join(result["snapshot_versions"]) or "无可用快照"))
     print("工具：" + " → ".join(e["tool"] for e in result["evidence"]))
     print("审计编号：" + result["request_id"])
+    ungrounded = result.get("grounding", {}).get("ungrounded_numbers")
+    if ungrounded:
+        print("注意：以下数字未能在工具结果中找到，请人工核对：" + "、".join(ungrounded))
     source = result.get("data_source")
-    if source:
+    if source and source.get("kind") == "historical_backtest":
+        print("历史数据模式：" + source["dataset_version"])
+    elif source:
         print("飞书来源核验：" + source["source_checked_at"])
         print("来源数据截至：" + source["source_data_as_of"])
         if source["freshness_status"] == "check_overdue":
@@ -76,6 +92,10 @@ def main() -> int:
     parser.add_argument("--sync-state", type=Path, default=DEFAULT_SYNC_STATE,
                         help="已有飞书每日同步状态文件")
     parser.add_argument("--state-dir", type=Path, default=research.DEFAULT_STATE)
+    parser.add_argument("--history-package", type=Path,
+                        help="历史数据模式：使用 historical_backtest.py build 生成的回测包，不读取飞书")
+    parser.add_argument("--history-min-orders", type=int, default=DEFAULT_MIN_ORDERS,
+                        help=f"历史数据模式每组最少订单数（默认{DEFAULT_MIN_ORDERS}）")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--setup", action="store_true", help="在本地隐藏输入API Key")
     modes.add_argument("--check", action="store_true", help="检查本地配置与快照，不调用API")
@@ -88,6 +108,8 @@ def main() -> int:
             configure()
             return 0
         settings = load_settings()
+        if args.history_package is not None:
+            return run_history(args, settings)
         source = FeishuSnapshotSource(state=args.state_dir, sync_state=args.sync_state)
 
         def prepare_tools():
@@ -109,34 +131,9 @@ def main() -> int:
                   "endpoint": "https://api.deepseek.com/responses", "network_called": False,
                   "data_source": source_info}))
             return 0 if configured else 2
-        try:
-            timeout = float(settings["DEEPSEEK_TIMEOUT"])
-        except ValueError:
-            raise LLMError("DEEPSEEK_TIMEOUT必须为秒数。") from None
-        agent = ResearchAgent(DeepSeekLLM(api_key=settings.get("DEEPSEEK_API_KEY", ""),
-                              model=settings["DEEPSEEK_MODEL"], timeout=timeout),
-                              state=args.state_dir, tool_factory=prepare_tools)
-        if args.question is not None:
-            answer = agent.ask(args.question)
-            print(research.encoded(answer)) if args.json else print_answer(answer, args.show_evidence)
-            return 0
+        agent = ResearchAgent(make_llm(settings), state=args.state_dir, tool_factory=prepare_tools)
         mode = "每次提问读取最新成功同步的飞书版本" if args.snapshot is None else "固定历史快照模式"
-        print(f"SocialDog研究助理已启动。{mode}；请输入完整日期与范围。输入 /exit 退出。")
-        while True:
-            try:
-                question = input("\n你：").strip()
-            except EOFError:
-                break
-            if question.lower() in {"/exit", "/quit"}:
-                break
-            if not question:
-                continue
-            try:
-                answer = agent.ask(question)
-                print(research.encoded(answer)) if args.json else print_answer(answer, args.show_evidence)
-            except (LLMError, ValueError) as error:
-                print("本次分析未完成：" + str(error), file=sys.stderr)
-        return 0
+        return converse(agent, args, mode)
     except (LLMError, ValueError, OSError, KeyError, research.AnalysisError):
         # Specific known errors are safe; file/JSON errors should not expose paths or credentials.
         error = sys.exc_info()[1]
@@ -150,6 +147,40 @@ def main() -> int:
         print("\n已退出。", file=sys.stderr)
         return 130
 
+
+def run_history(args, settings: dict) -> int:
+    prepare_tools = lambda: build_history_tools(args.history_package, args.state_dir, args.history_min_orders)
+    info = prepare_tools().source_info  # Verifies package integrity before any model call.
+    if args.check:
+        configured = bool(settings.get("DEEPSEEK_API_KEY", "").strip())
+        print(research.encoded({"history_package_ok": True, "data_source": info, "api_key_configured": configured,
+                                "model": settings["DEEPSEEK_MODEL"], "network_called": False}))
+        return 0 if configured else 2
+    agent = ResearchAgent(make_llm(settings), state=args.state_dir, tool_factory=prepare_tools)
+    return converse(agent, args, "历史数据模式 " + info["dataset_version"])
+
+
+def converse(agent: ResearchAgent, args, mode: str) -> int:
+    if args.question is not None:
+        answer = agent.ask(args.question)
+        print(research.encoded(answer)) if args.json else print_answer(answer, args.show_evidence)
+        return 0
+    print(f"SocialDog研究助理已启动。{mode}；请输入完整日期与范围。输入 /exit 退出。")
+    while True:
+        try:
+            question = input("\n你：").strip()
+        except EOFError:
+            break
+        if question.lower() in {"/exit", "/quit"}:
+            break
+        if not question:
+            continue
+        try:
+            answer = agent.ask(question)
+            print(research.encoded(answer)) if args.json else print_answer(answer, args.show_evidence)
+        except (LLMError, ValueError) as error:
+            print("本次分析未完成：" + str(error), file=sys.stderr)
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())

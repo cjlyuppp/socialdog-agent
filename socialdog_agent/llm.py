@@ -51,11 +51,14 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high")
+
+
 class ResponsesAPILLM(ResponsesLLM):
     """Non-streaming HTTP implementation for Responses-compatible providers."""
 
     def __init__(self, *, api_key: str, model: str, base_url: str,
-                 timeout: float = 45, max_output_tokens: int = 4096):
+                 timeout: float = 45, max_output_tokens: int = 8192, reasoning_effort: str = "low"):
         endpoint = urlsplit(base_url)
         if (endpoint.scheme != "https" or not endpoint.hostname or endpoint.username
                 or endpoint.password or endpoint.query or endpoint.fragment):
@@ -66,6 +69,9 @@ class ResponsesAPILLM(ResponsesLLM):
             raise LLMError("模型名称不能为空。")
         if not math.isfinite(timeout) or not 1 <= timeout <= 120:
             raise LLMError("模型请求超时必须为1–120秒。")
+        if reasoning_effort not in REASONING_EFFORTS:
+            raise LLMError("推理强度只能是" + "/".join(REASONING_EFFORTS) + "。")
+        self.reasoning_effort = reasoning_effort
         self._api_key = api_key.strip()
         self.model = model.strip()
         self.endpoint = base_url.rstrip("/") + "/responses"
@@ -78,7 +84,7 @@ class ResponsesAPILLM(ResponsesLLM):
         payload = {"model": self.model, "instructions": instructions, "input": input,
                    "tools": tools, "tool_choice": tool_choice,
                    "max_output_tokens": self.max_output_tokens, "stream": False,
-                   "store": False, "reasoning": {"effort": "none"}}
+                   "store": False, "reasoning": {"effort": self.reasoning_effort}}
         request = Request(self.endpoint, data=json.dumps(payload, ensure_ascii=False,
                           allow_nan=False).encode("utf-8"), method="POST",
                           headers={"Authorization": "Bearer " + self._api_key,
@@ -104,9 +110,19 @@ class ResponsesAPILLM(ResponsesLLM):
 
 
 class DeepSeekLLM(ResponsesAPILLM):
-    def __init__(self, *, api_key: str, model: str = "deepseek-flash", timeout: float = 45):
+    def __init__(self, *, api_key: str, model: str = "deepseek-flash", timeout: float = 45,
+                 reasoning_effort: str = "low"):
         super().__init__(api_key=api_key, model=model, base_url="https://api.deepseek.com",
-                         timeout=timeout)
+                         timeout=timeout, reasoning_effort=reasoning_effort)
+
+    def create_response(self, *, input: list[dict], instructions: str,
+                        tools: list[dict], tool_choice: str = "auto") -> LLMResponse:
+        # DeepSeek thinking mode rejects forced tool selection. The agent still
+        # independently rejects answers without valid tool evidence.
+        if self.reasoning_effort != "none" and tool_choice == "required":
+            tool_choice = "auto"
+        return super().create_response(input=input, instructions=instructions,
+                                       tools=tools, tool_choice=tool_choice)
 
 
 def parse_response(data: Any) -> LLMResponse:

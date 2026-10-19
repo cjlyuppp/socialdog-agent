@@ -1,2 +1,2 @@
-# XLSX reading and verification only; Excel authoring uses @oai/artifact-tool.
-openpyxl>=3.1,<4
+# Runtime dependencies and test extras are defined once in pyproject.toml.
+.[test]

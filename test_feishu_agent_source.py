@@ -64,6 +64,24 @@ class FeishuSourceTest(unittest.TestCase):
         self.assertNotIn("private_member", str(connection.execute("SELECT * FROM orders").fetchall()))
         connection.close()
 
+    def test_item_lines_are_linked_and_queryable_by_product(self):
+        data = payload(21)
+        data["tables"]["03 订单商品明细"]["rows"] = [
+            {"源record_id": f"detail_{i}", "关联订单": [f"rec_{i}"], "历史商品名称": "美式", "数量": 1,
+             "明细应付总额": 12, "明细已退金额": 2, "系统支付净额": 10} for i in range(21)]
+        data["summary"]["各表行数"]["03 订单商品明细"] = 21
+        snapshot, info = self.source.ingest_payload(data, checked_at="2026-10-02T00:00:00+08:00")
+        self.assertTrue(snapshot.name.endswith("_v" + research.TOOL_VERSION))
+        tools = build_research_tools(snapshot, self.root / "audit", info)
+        described = tools.execute("describe_data", "{}", "数据")
+        self.assertEqual(described["item_coverage"]["item_lines_linked"], 21)
+        result = tools.execute("query_products", json.dumps({"group": "product", "period": "day", "product": None,
+                                                             "start_date": None, "end_date": None}), "商品")
+        self.assertEqual(result["rows"][0]["product"], "美式")
+        self.assertEqual(result["rows"][0]["recorded_quantity"], 21)
+        self.assertEqual(result["rows"][0]["period"], "2026-10-01")
+        self.assertNotIn("private_member", json.dumps(result))
+
     def test_unchanged_content_reuses_snapshot_but_updates_check_time(self):
         first, _ = self.source.ingest_payload(payload(), checked_at="2026-10-02T00:00:00+08:00")
         first_hash = research.digest(first / "snapshot.sqlite")

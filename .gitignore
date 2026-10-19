@@ -43,3 +43,6 @@ __pycache__/
 .env.*
 !.env.example
 .venv/
+.venv-api/
+*.egg-info/
+build/

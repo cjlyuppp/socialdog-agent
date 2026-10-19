@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import csv
 import hashlib
@@ -17,7 +17,7 @@ import shutil
 import sqlite3
 import sys
 
-VERSION = 'history-backtest-1.0'
+VERSION = 'history-backtest-1.1'
 HEADERS = ['订单编号','创建时间','状态','类型','所属分类','收费项目','规格属性','项目单价','数量','小计',
            '商品退款状态','改价/权益','整单优惠（分摊）','优惠券抵扣（分摊）','活动优惠（分摊）','积分抵扣（分摊）',
            '抹零（分摊）','实际成交金额','扣除余额','抖音券收款金额（分摊）','美团券收款金额（分摊）','收款金额',
@@ -27,8 +27,11 @@ MONEY = {'项目单价':'unit_price_cents','小计':'subtotal_cents','整单优�
          '积分抵扣（分摊）':'points_cents','抹零（分摊）':'rounding_cents','实际成交金额':'recorded_deal_cents',
          '扣除余额':'wallet_cents','抖音券收款金额（分摊）':'douyin_cents','美团券收款金额（分摊）':'meituan_cents',
          '收款金额':'recorded_receipt_cents','运费/配送费':'delivery_fee_cents'}
-GROUPS = {'all':None,'day':'order_date','hour':'hour','weekday':'weekday','category':'category',
-          'product':'product','delivery':'delivery','payment':'payment_method','status':'status','type':'transaction_type'}
+GROUPS = {'all':None,'day':'order_date','week':'week_start','month':'month','hour':'hour','weekday':'weekday',
+          'category':'category','product':'product','delivery':'delivery','payment':'payment_method',
+          'status':'status','type':'transaction_type'}
+# Derived period columns are computed from order_date, never stored separately.
+DERIVED = {'week_start':"date(order_date, printf('-%d days', weekday-1))",'month':'substr(order_date,1,7)'}
 TOTALS = ['recorded_deal_cents','recorded_receipt_cents','wallet_cents','coupon_cents','points_cents','delivery_fee_cents']
 RULES = [
     'all为全部来源记录；baseline按整单筛选：状态全部为已完成、类型全部为产品、全部无退款标记、无疑似重复行且金额桥接无差异。',
@@ -37,7 +40,8 @@ RULES = [
     '记录收款金额不等于银行到账或净收入；余额扣除、优惠、充值分别保留；运费可能为订单字段在明细重复，不能默认逐行合计为实际运费。',
     '时间按Asia/Shanghai作工作假设，来源本身没有时区声明；导出截至时间和整月完整性未知。',
     '没有顾客唯一标识，订单编号不能替代顾客ID；当前agent的20位会员披露规则保持原样。',
-    '本包为本地离线参考数据；不自动注册外部模型工具，不自动切换网页或飞书活动来源。',
+    '本包可经 chat_agent.py/web_agent.py --history-package 以历史数据模式接入agent；不切换飞书活动来源。',
+    '历史数据模式按订单数设披露门槛（默认每组至少5个订单），不使用会员人数门槛。',
 ]
 FLAGS = {
     'payment_year_mismatch':'收款时间与创建时间跨年，原值保留，原因待确认',
@@ -54,6 +58,7 @@ FLAGS = {
     'exceptional_member_discount':'来源写明0.1折会员权益，真实业务性质待确认，不擅自标为测试',
     'money_bridge_unconfirmed':'列间金额桥接差异超过0.01元，保留原值待确认',
     'order_field_conflict':'同订单的订单级字段不一致',
+    'payment_time_redacted_after_as_of':'收款时间晚于as_of截断日，已置空以免泄露之后的信息',
 }
 
 def dumps(v):
@@ -82,6 +87,27 @@ def parse_time(v, optional=False):
         return v.replace(tzinfo=None).isoformat(sep=' ')
     return datetime.strptime(str(v).strip(), '%Y-%m-%d %H:%M:%S').isoformat(sep=' ')
 
+def truncate_as_of(raw, as_of):
+    """Drop every order with any line created after as_of; redact later payment times.
+
+    Returns the kept rows and the number of removed rows. The drop is physical: the
+    package built from the result contains nothing after the cutoff.
+    """
+    if as_of is None:
+        return raw, 0
+    if datetime.strptime(as_of,'%Y-%m-%d').date().isoformat()!=as_of:
+        raise ValueError('as_of必须为YYYY-MM-DD')
+    late = {r['订单编号'] for _,r in raw if parse_time(r['创建时间'])[:10] > as_of}
+    kept = []
+    for rownum, r in raw:
+        if r['订单编号'] in late:
+            continue
+        payment = parse_time(r['收款时间'], True)
+        if payment and payment[:10] > as_of:
+            r = {**r, '收款时间': None, '_payment_redacted': True}
+        kept.append((rownum, r))
+    return kept, len(raw) - len(kept)
+
 def normalize(raw, source_hash):
     """Keep all rows; set explicit row flags and conservative whole-order eligibility."""
     exact = defaultdict(list)
@@ -109,7 +135,9 @@ def normalize(raw, source_hash):
             quantity=int(q), refund_cents=None, refund_quantity=None, customer_key=None)
         line.update({f:cents(r[h]) for h,f in MONEY.items()})
         flags = []
-        if payment is None:
+        if r.get('_payment_redacted'):
+            flags.append('payment_time_redacted_after_as_of')
+        elif payment is None:
             flags.append('payment_time_missing')
         elif payment[:4] != created[:4]:
             flags.append('payment_year_mismatch')
@@ -171,11 +199,13 @@ def aggregate_python(lines, args):
     validate_args(args)
     selected = [r for r in lines if (args['scope']=='all' or r['baseline_eligible'])
                 and (not args.get('start_date') or r['order_date'] >= args['start_date'])
-                and (not args.get('end_date') or r['order_date'] <= args['end_date'])]
+                and (not args.get('end_date') or r['order_date'] <= args['end_date'])
+                and (not args.get('product') or r['product'] == args['product'])]
     field = GROUPS[args['by']]
     groups = defaultdict(list)
     for row in selected:
-        groups[str(row[field]) if field and row[field] is not None else '未记录' if field else '全部'].append(row)
+        value = period_label(field, row['order_date']) if field in DERIVED else row[field] if field else None
+        groups[str(value) if field and value is not None else '未记录' if field else '全部'].append(row)
     result = []
     for name in sorted(groups, key=(lambda x:int(x)) if args['by'] in {'hour','weekday'} else None):
         group = groups[name]
@@ -184,9 +214,15 @@ def aggregate_python(lines, args):
             **{f:int(sum((Decimal(r[f]) for r in group),Decimal(0))) for f in TOTALS}))
     return query_envelope(args,result)
 
+def period_label(field, order_date):
+    day = date.fromisoformat(order_date)
+    return (day - timedelta(days=day.isoweekday()-1)).isoformat() if field == 'week_start' else order_date[:7]
+
 def validate_args(a):
-    if not isinstance(a,dict) or set(a)-{'scope','by','start_date','end_date'}:
+    if not isinstance(a,dict) or set(a)-{'scope','by','start_date','end_date','product'}:
         raise ValueError('查询参数存在未知字段')
+    if a.get('product') is not None and (not isinstance(a['product'],str) or not 0<len(a['product'])<=100):
+        raise ValueError('product必须为1–100字的商品原名')
     if a.get('scope') not in {'all','baseline'}: raise ValueError('scope只能为all或baseline')
     if a.get('by') not in GROUPS: raise ValueError('不支持的分组字段')
     for f in ['start_date','end_date']:
@@ -199,15 +235,105 @@ def validate_args(a):
 
 def query_envelope(a, rows):
     return {'status':'ok' if rows else 'unavailable','scope':a['scope'],'by':a['by'],
-            'start_date':a.get('start_date'),'end_date':a.get('end_date'),'rows':rows,
+            'start_date':a.get('start_date'),'end_date':a.get('end_date'),'product':a.get('product'),'rows':rows,
             'reason':None if rows else '没有匹配的来源记录；不能解释为零营业额或停业',
             'units':'金额字段为整数分；quantity为来源记录件数；不是退款后净销量',
             'population':'本地离线历史参考样本；非已核实净收入，非银行到账；不满足现有会员披露人数核验',
             'group_order_counts_additive':a['by'] not in {'category','product','type'}}
 
-def write_csv(path, records):
+PRICE_RULES = [
+    '价格取自项目单价（来源标价），按商品原名+规格分别追踪；不合并相似名称。',
+    '每个有销售的日期取记录件数最多的单价为当日主价格；连续主价格相同的日期合并为价格段。',
+    '短于min_run_days个销售日的价格段视为噪声（单笔改价、赠品等）丢弃，再合并相邻同价段；剩余价格段之间的变化记为调价事件。',
+    '事件日为新价格段的第一个销售日；前后窗口各window_days个日历天，截断在观察期内。',
+    '窗口指标为描述性前后对比，不控制季节、校历、天气或同期其他调价，不是价格弹性或因果效应。',
+    '没有成本数据，利润变化不可计算；收款金额不等于净收入。',
+]
+
+def price_events(lines, product=None, min_run_days=3, window_days=14, scope='baseline'):
+    """Detect persistent list-price changes per product+spec and describe before/after windows."""
+    if product is not None and (not isinstance(product,str) or not 0<len(product)<=100):
+        raise ValueError('product必须为1–100字的商品原名')
+    for name,value,low,high in [('min_run_days',min_run_days,1,30),('window_days',window_days,1,60)]:
+        if isinstance(value,bool) or not isinstance(value,int) or not low<=value<=high:
+            raise ValueError(f'{name}必须为{low}–{high}的整数')
+    if scope not in {'all','baseline'}: raise ValueError('scope只能为all或baseline')
+    priced=[r for r in lines if r['transaction_type']=='产品' and r['status'] not in {'已取消','已退单'}
+            and r['product'] not in {'','空'} and (product is None or r['product']==product)]
+    daily=defaultdict(lambda:defaultdict(Counter))
+    for r in priced:
+        daily[(r['product'],r['specification'] or '未记录')][r['order_date']][r['unit_price_cents']]+=r['quantity']
+    first_day=min(r['order_date'] for r in lines); last_day=max(r['order_date'] for r in lines)
+    events=[]
+    for (name,spec),days in sorted(daily.items()):
+        runs=[]
+        for day in sorted(days):
+            # Mode by quantity; ties go to the lower price for determinism.
+            price=min(days[day].items(),key=lambda kv:(-kv[1],kv[0]))[0]
+            if runs and runs[-1]['price']==price:
+                runs[-1]['last_day']=day;runs[-1]['sales_days']+=1
+            else:
+                runs.append({'price':price,'first_day':day,'last_day':day,'sales_days':1})
+        merged=[]
+        for run in (r for r in runs if r['sales_days']>=min_run_days):
+            if merged and merged[-1]['price']==run['price']:
+                merged[-1].update(last_day=run['last_day'],sales_days=merged[-1]['sales_days']+run['sales_days'])
+            else:
+                merged.append(dict(run))
+        for old,new in zip(merged,merged[1:]):
+            events.append({'product':name,'specification':spec,'event_date':new['first_day'],
+                'old_unit_price_cents':old['price'],'new_unit_price_cents':new['price'],
+                'price_change_pct':round((new['price']-old['price'])/old['price']*100,2) if old['price'] else None,
+                'direction':'降价' if new['price']<old['price'] else '涨价',
+                'old_price_last_sales_day':old['last_day'],'old_price_sales_days':old['sales_days'],
+                'new_price_sales_days':new['sales_days']})
+    scoped=[r for r in lines if scope=='all' or r['baseline_eligible']]
+    store_days=defaultdict(set);store_receipt=defaultdict(int)
+    for r in scoped:
+        store_days[r['order_date']].add(r['order_key']);store_receipt[r['order_date']]+=r['recorded_receipt_cents']
+    for event in events:
+        start=date.fromisoformat(event['event_date'])
+        windows={'before':(start-timedelta(days=window_days),start-timedelta(days=1)),
+                 'after':(start,start+timedelta(days=window_days-1))}
+        for label,(lo,hi) in windows.items():
+            lo,hi=max(lo.isoformat(),first_day),min(hi.isoformat(),last_day)
+            same=[r for r in scoped if lo<=r['order_date']<=hi and r['product']==event['product']
+                  and (r['specification'] or '未记录')==event['specification']]
+            dates=[d for d in store_days if lo<=d<=hi]
+            quantity=sum(r['quantity'] for r in same);receipt=sum(r['recorded_receipt_cents'] for r in same)
+            store=sum(store_receipt[d] for d in dates)
+            event[label]={'start':lo,'end':hi,
+                'calendar_days':(date.fromisoformat(hi)-date.fromisoformat(lo)).days+1 if lo<=hi else 0,
+                'days_with_orders':len(dates),'product_order_count':len({r['order_key'] for r in same}),
+                'product_quantity':quantity,'product_receipt_cents':receipt,
+                'store_order_count':sum(len(store_days[d]) for d in dates),'store_receipt_cents':store,
+                'product_quantity_per_day_with_orders':round(quantity/len(dates),2) if dates else None,
+                'product_receipt_per_day_with_orders_cents':round(receipt/len(dates)) if dates else None,
+                'product_receipt_share_of_store_pct':round(receipt/store*100,2) if store else None,
+                'share_of_lines_at_new_price_pct':round(sum(r['unit_price_cents']==event['new_unit_price_cents'] for r in same)/len(same)*100,2) if same else None}
+        before,after=event['before'],event['after']
+        def change(key):
+            a,b=before[key],after[key]
+            return round((b-a)/a*100,2) if a and b is not None else None
+        # Percent changes are unit-free; their keys deliberately carry no _cents suffix.
+        event['change_pct']={'product_quantity_per_day':change('product_quantity_per_day_with_orders'),
+                             'product_receipt_per_day':change('product_receipt_per_day_with_orders_cents'),
+                             'product_receipt_share_of_store':change('product_receipt_share_of_store_pct')}
+        event['store_receipt_per_day_change_pct']=(round((after['store_receipt_cents']/after['days_with_orders'])/
+            (before['store_receipt_cents']/before['days_with_orders'])*100-100,2)
+            if before['days_with_orders'] and after['days_with_orders'] and before['store_receipt_cents'] else None)
+        lo,hi=windows['before'][0].isoformat(),windows['after'][1].isoformat()
+        event['concurrent_events']=sorted({f"{e['product']}/{e['specification']}@{e['event_date']}" for e in events
+                                           if e is not event and lo<=e['event_date']<=hi})
+        event['profit']={'status':'unavailable','missing':['原料、人工及其他成本','退款金额与收入确认口径']}
+    return {'status':'ok' if events else 'unavailable','scope':scope,'product':product,
+            'min_run_days':min_run_days,'window_days':window_days,'event_count':len(events),'events':events,
+            'reason':None if events else '没有检测到持续的项目单价变化',
+            'rules':PRICE_RULES,'statistical_tests_performed':0}
+
+def write_csv(path, records, fields=None):
     with path.open('w',encoding='utf-8-sig',newline='') as f:
-        writer=csv.DictWriter(f,fieldnames=list(records[0]))
+        writer=csv.DictWriter(f,fieldnames=list(records[0]) if records else fields)
         writer.writeheader()
         for r in records:
             writer.writerow({k:'；'.join(v) if isinstance(v,list) else v for k,v in r.items()})
@@ -236,21 +362,36 @@ def read_package(folder):
     return manifest
 
 def aggregate_sql(folder,args):
+    with sqlite3.connect((Path(folder)/'history.sqlite').resolve().as_uri()+'?mode=ro&immutable=1',uri=True) as conn:
+        conn.execute('PRAGMA query_only=ON')
+        return aggregate_connection(conn,args)
+
+def aggregate_connection(conn,args):
+    """Use the same validated aggregation on an explicitly supplied read-only connection."""
     validate_args(args)
     column=GROUPS[args['by']]
-    grouping=f'CAST(COALESCE("{column}",\'未记录\') AS TEXT)' if column else "'全部'"
+    expression=DERIVED.get(column,f'"{column}"')
+    grouping=f'CAST(COALESCE({expression},\'未记录\') AS TEXT)' if column else "'全部'"
     where,parameters=[],[]
     if args['scope']=='baseline': where.append('baseline_eligible=1')
+    if args.get('product'): where.append('product = ?');parameters.append(args['product'])
     for f,op in [('start_date','>='),('end_date','<=')]:
         if args.get(f): where.append('order_date '+op+' ?');parameters.append(args[f])
     sql=f'SELECT {grouping} AS group_name,COUNT(*),COUNT(DISTINCT order_key),SUM(quantity),'+','.join(f'SUM({f})' for f in TOTALS)+' FROM lines'
     if where: sql+=' WHERE '+' AND '.join(where)
     if column: sql+=' GROUP BY '+grouping
     sql+=' HAVING COUNT(*)>0 ORDER BY '+('CAST(group_name AS INTEGER)' if args['by'] in {'hour','weekday'} else 'group_name')
+    rows=[dict(zip(['group','line_count','order_count','recorded_quantity']+TOTALS,r)) for r in conn.execute(sql,parameters)]
+    return query_envelope(args,rows)
+
+LINE_FIELDS=['order_key','order_date','status','transaction_type','product','specification','quantity',
+             'unit_price_cents','recorded_receipt_cents','baseline_eligible']
+
+def load_lines(folder):
     with sqlite3.connect((Path(folder)/'history.sqlite').resolve().as_uri()+'?mode=ro&immutable=1',uri=True) as conn:
         conn.execute('PRAGMA query_only=ON')
-        rows=[dict(zip(['group','line_count','order_count','recorded_quantity']+TOTALS,r)) for r in conn.execute(sql,parameters)]
-    return query_envelope(args,rows)
+        return [dict(zip(LINE_FIELDS,r)) for r in conn.execute(
+            'SELECT '+','.join(f'"{f}"' for f in LINE_FIELDS)+' FROM lines ORDER BY source_row')]
 
 def dispatch(folder, operation, args):
     manifest=read_package(folder)
@@ -260,6 +401,9 @@ def dispatch(folder, operation, args):
         return json.loads((Path(folder)/'limitations.json').read_text())[args['analysis']]
     if operation=='aggregate':
         try: return aggregate_sql(folder,args)
+        except (ValueError,TypeError): return {'status':'error','reason':'参数非法，未执行查询'}
+    if operation=='price_events':
+        try: return price_events(load_lines(folder),**args)
         except (ValueError,TypeError): return {'status':'error','reason':'参数非法，未执行查询'}
     raise ValueError('不支持的操作')
 
@@ -271,7 +415,7 @@ def limitations(recharge_count):
         'stored_value':['账户稳定关联键','本金与赠送余额变动','期初期末余额'],
         'ab_test':['随机分组、资格及曝光','预注册指标和观察窗口'],
         'waiting_time':['实际制作与取餐时间戳','跨年收款时间的原因'],
-        'today':['当前日期的经营数据；本包创建时间仅覆盖2023年3月'],
+        'today':['当前日期的经营数据；本包只含历史创建时间范围内的记录'],
         'profit':['可核验的原料、人工及其他成本','退款及收入确认口径'],
         'sales_source':['销售来源字段；支付方式不能替代获客渠道'],
         'live_agent_public_query':['可确认会员ID覆盖；本表没有顾客ID，不能满足当前20位会员披露核验'],
@@ -303,6 +447,8 @@ def cases(lines,description,quality,limits):
         ('A13','全部来源记录按交易类型统计，充值与产品分开。','all','type',None,None),
         ('A14','只看3月31日基准样本的记录金额。','baseline','all','2023-03-31','2023-03-31'),
         ('A15','查2024年7月5日创建的基准订单。没有记录就说明没有记录。','baseline','all','2024-07-05','2024-07-05'),
+        ('T01','按周列出基准样本的订单数与记录收款金额，并说明哪些周不完整。','baseline','week',None,None),
+        ('T02','按月汇总基准样本的订单数与记录收款金额。','baseline','month',None,None),
     ]
     for i,q,scope,by,start,end in queries:
         a=dict(scope=scope,by=by,start_date=start,end_date=end)
@@ -312,6 +458,21 @@ def cases(lines,description,quality,limits):
                 ('A18',dict(scope='all',by='all; DROP TABLE lines;',start_date=None,end_date=None))]:
         add(i,'以下非法查询参数应被拒绝：'+json.dumps(a,ensure_ascii=False),'aggregate',a,
             {'status':'error','reason':'参数非法，未执行查询'},['拒绝非法日期或分组，不执行原始SQL'])
+    top=Counter(r['product'] for r in lines if r['baseline_eligible'] and r['product'] not in {'','空'}).most_common(1)
+    if top:
+        a=dict(scope='baseline',by='day',start_date=None,end_date=None,product=top[0][0])
+        add('A19',f'基准样本中「{top[0][0]}」按日的记录件数和收款金额是多少？','aggregate',a,aggregate_python(lines,a),
+            ['只统计该商品原名','订单数为含该商品的订单，不是全店订单'])
+    events=price_events(lines)
+    add('P01','历史数据里哪些商品发生过持续的调价？分别是哪天、从多少调到多少？','price_events',
+        {'product':None,'min_run_days':3,'window_days':14,'scope':'baseline'},events,
+        ['调价事件由项目单价重建，不是店方调价记录','说明检测规则与噪声处理'])
+    cuts=[e for e in events['events'] if e['direction']=='降价']
+    if cuts:
+        e=cuts[0]
+        add('P02',f'「{e["product"]}」在{e["event_date"]}前后降价，降价后它的销量和收款有没有提升？利润呢？','price_events',
+            {'product':e['product'],'min_run_days':3,'window_days':14,'scope':'baseline'},price_events(lines,product=e['product']),
+            ['前后对比是描述性，不是因果效应','说明同期其他调价、季节与营业天数差异','没有成本数据，不能回答利润'])
     quality_questions=[('payment_time','收款时间能否直接作为2023年营业时间轴？'),
         ('duplicates','疑似重复明细是否应该直接删除？请列出来源行号和依据。'),
         ('refunds','已完成的订单是不是都没有退款？'),
@@ -335,24 +496,29 @@ def cases(lines,description,quality,limits):
         add(f'U{n:02d}',q,'unavailable',{'analysis':analysis},limits[analysis],['明确缺口，不编造替代结果','充值数据有7条，不等于具备完整账户流水'])
     return tests
 
-def build(source,folder):
+def build(source,folder,as_of=None,sheet_name=None):
     import openpyxl
     source,folder=Path(source).resolve(),Path(folder).resolve()
     if folder.exists(): raise ValueError('输出目录已存在，拒绝覆盖；请使用全新目录')
     fingerprint=digest(source)
     w=openpyxl.load_workbook(source,read_only=True,data_only=False)
     try:
-        if w.sheetnames!=['Sheet1']: raise ValueError('来源工作表结构变化，需人工确认')
-        s=w['Sheet1']
+        if sheet_name is None and w.sheetnames!=['Sheet1']: raise ValueError('来源工作表结构变化，请用--sheet明确指定27列原始数据工作表')
+        selected=sheet_name or 'Sheet1'
+        if selected not in w.sheetnames: raise ValueError('未找到指定的来源工作表')
+        s=w[selected]
         if list(next(s.iter_rows(min_row=1,max_row=1,values_only=True)))!=HEADERS:
             raise ValueError('来源27项字段名称或顺序变化，需人工确认')
         raw=[(i,dict(zip(HEADERS,r))) for i,r in enumerate(s.iter_rows(min_row=2,values_only=True),2)
              if any(v not in (None,'') for v in r)]
     finally: w.close()
+    raw,removed=truncate_as_of(raw,as_of)
     lines,orders=normalize(raw,fingerprint)
     if not lines or digest(source)!=fingerprint: raise ValueError('来源为空或读取时发生变化')
     folder.mkdir(parents=True)
-    shutil.copyfile(source,folder/'原始文件_字节一致备份.xlsx')
+    # A truncated package must not carry the full source file: it would leak later rows.
+    if as_of is None:
+        shutil.copyfile(source,folder/'原始文件_字节一致备份.xlsx')
     write_csv(folder/'clean_lines.csv',lines)
     write_csv(folder/'clean_orders.csv',orders)
     (folder/'clean_records.json').write_text(dumps({'lines':lines,'orders':orders}),encoding='utf-8')
@@ -378,7 +544,9 @@ def build(source,folder):
         'baseline_exclusion_reasons':dict(Counter(reason for r in orders for reason in r['exclusion_reasons'].split('；') if reason)),
     }
     quality['flag_counts_notice']='各问题可重叠；不能直接相加作为排除行数'
-    description={'status':'ok','dataset_version':f'{min(r["order_date"] for r in lines)[:7]}_{fingerprint[:12]}_{VERSION}',
+    description={'status':'ok','dataset_version':f'{min(r["order_date"] for r in lines)[:7]}_{fingerprint[:12]}_{VERSION}'+(f'_asof{as_of}' if as_of else ''),
+        'source_sheet':selected,
+        'as_of':as_of,'source_rows_removed_after_as_of':removed,
         'source_table_count':1,'source_fields':HEADERS,'source_line_count':len(lines),'source_order_count':len(orders),
         'observation_start':min(r['created_at'] for r in lines),'observation_end':max(r['created_at'] for r in lines),
         'source_export_cutoff':None,'full_month_completeness_confirmed':False,'customer_identifiers_available':False,
@@ -392,26 +560,30 @@ def build(source,folder):
     (folder/'questions_only.jsonl').write_text(''.join(json.dumps({k:c[k] for k in ['case_id','question']},ensure_ascii=False)+'\n' for c in gold),encoding='utf-8')
     issues=[{'source_row':r['source_row'],'order_key':r['order_key'],'flag':f,'meaning':FLAGS[f],
              'baseline_eligible':r['baseline_eligible']} for r in lines for f in r['flags']]
-    write_csv(folder/'quality_issues.csv',issues)
+    write_csv(folder/'quality_issues.csv',issues,['source_row','order_key','flag','meaning','baseline_eligible'])
     shutil.copyfile(Path(__file__),folder/'historical_backtest.py')
+    make_workbook_payload(folder,raw,lines,orders,issues,gold,description,quality)
     manifest={'tool_version':VERSION,'source_sha256':fingerprint,'data_description':description,
               'test_case_count':len(gold),'rules':RULES,'file_sha256':{}}
     for p in folder.iterdir():
         if p.is_file(): manifest['file_sha256'][p.name]=digest(p)
     (folder/'manifest.json').write_text(dumps(manifest),encoding='utf-8')
-    make_workbook_payload(folder,raw,lines,orders,issues,gold,description,quality)
     print(dumps({'output':str(folder),'description':description,'cases':len(gold)}))
 
 def make_workbook_payload(folder,raw,lines,orders,issues,gold,description,quality):
+    def value(v):
+        if isinstance(v,datetime): return v.isoformat(sep=' ')
+        if isinstance(v,date): return v.isoformat()
+        return '；'.join(v) if isinstance(v,list) else v
     def sheet(name,fields,records,widths=None):
         return {'name':name,'headers':[label for key,label in fields],
                 'fields':[key for key,label in fields],
-                'values':[[('；'.join(r.get(k,[])) if isinstance(r.get(k),list) else r.get(k)) for k,label in fields] for r in records],
+                'values':[[value(r.get(k)) for k,label in fields] for r in records],
                 'widths':widths or {}}
     notes=[{'item':'创建时间范围','value':description['observation_start']+' 至 '+description['observation_end']},
         {'item':'来源记录','value':f'{len(lines)}条明细；{len(orders)}个不同订单编号'},
         {'item':'基准样本','value':f'{description["baseline_line_count"]}条明细；{description["baseline_order_count"]}个订单'},
-        {'item':'数据来源','value':'老师提供 transaction_2203(1).xlsx；原始备份与来源SHA256见manifest.json'},
+        {'item':'数据来源','value':'本地提供的27列交易表；原始备份与来源SHA256见manifest.json'},
         {'item':'样本定义','value':'整单已完成、全部产品、无退款标记、无疑似重复、金额桥接无差异'},
         {'item':'金额口径','value':'记录收款金额；非已核实净收入或银行到账；未知退款金额保持空值'},
         {'item':'时间处理','value':f'{len([r for r in lines if "payment_year_mismatch" in r["flags"]])}条跨年收款时间保留；查询使用创建时间'},
@@ -461,7 +633,8 @@ def verify(folder):
         'golden_cases_checked':len(checked),'independent_sql_vs_python_groups':len(comparisons),
         'cases':checked,'reconciliations':comparisons,'external_model_called':False,
         'agent_answer_quality_evaluated':False,'source_backup_sha256_matches':
-        digest(Path(folder)/'原始文件_字节一致备份.xlsx')==manifest['source_sha256']}
+        digest(Path(folder)/'原始文件_字节一致备份.xlsx')==manifest['source_sha256']
+        if manifest['data_description'].get('as_of') is None else 'omitted_for_as_of'}
     (Path(folder)/'verification.json').write_text(dumps(result),encoding='utf-8')
     return result
 
@@ -469,6 +642,8 @@ def main():
     p=argparse.ArgumentParser(description='历史数据离线清洗与回测参考；不调用外部模型')
     sub=p.add_subparsers(dest='command',required=True)
     b=sub.add_parser('build');b.add_argument('--source',type=Path,required=True);b.add_argument('--output-dir',type=Path,required=True)
+    b.add_argument('--as-of',help='YYYY-MM-DD；物理删除此日之后创建的订单，构建样本外测试包')
+    b.add_argument('--sheet',help='明确指定含27列原始字段的工作表；默认严格要求单个Sheet1')
     v=sub.add_parser('verify');v.add_argument('--package',type=Path,default=Path(__file__).resolve().parent)
     q=sub.add_parser('query');q.add_argument('--package',type=Path,default=Path(__file__).resolve().parent)
     q.add_argument('--scope',choices=['all','baseline'],required=True);q.add_argument('--by',choices=list(GROUPS),default='all')
@@ -476,11 +651,11 @@ def main():
     d=sub.add_parser('describe');d.add_argument('--package',type=Path,default=Path(__file__).resolve().parent)
     a=p.parse_args()
     try:
-        if a.command=='build': build(a.source,a.output_dir);return 0
+        if a.command=='build': build(a.source,a.output_dir,a.as_of,a.sheet);return 0
         if a.command=='verify':
             result=verify(a.package)
             print(dumps({k:v for k,v in result.items() if k not in {'cases','reconciliations'}}))
-            return 0 if result['status']=='passed' and result['source_backup_sha256_matches'] else 1
+            return 0 if result['status']=='passed' and result['source_backup_sha256_matches'] is not False else 1
         if a.command=='describe':print(dumps(dispatch(a.package,'describe',{})));return 0
         print(dumps(dispatch(a.package,'aggregate',dict(scope=a.scope,by=a.by,start_date=a.start_date,end_date=a.end_date))))
         return 0

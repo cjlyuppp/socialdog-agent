@@ -17,6 +17,14 @@ import web_agent
 
 
 class ContextTest(unittest.TestCase):
+    def test_loopback_binding_does_not_depend_on_reverse_dns(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            service = ChatService(Path(temporary), lambda: None, lambda: {})
+            with patch("socket.getfqdn", side_effect=AssertionError("Loopback must not query DNS")):
+                server = LocalServer(0, service)
+            self.assertTrue(server.origin.startswith("http://127.0.0.1:"))
+            server.server_close()
+
     def test_bounded_complete_turns_whitelist_and_recent_order(self):
         history = [{"question": str(i), "answer": "a" * 6000, "snapshot_versions": ["old"],
                     "query_scopes": [{"tool": "query_aggregate", "by": "all", "start_date": "2026-10-01",

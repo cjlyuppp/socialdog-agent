@@ -20,7 +20,7 @@ import uuid
 import feishu_daily_clean as cleaning
 import research_assistant as research
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = research.ROOT
 DEFAULT_SYNC_STATE = ROOT / "feishu_sync_state.json"
 EXPECTED_TABLES = {
     "00 研究说明与口径": "来源研究口径", "01 商品规格与价格快照": "商品价格快照",
@@ -115,11 +115,13 @@ class FeishuSnapshotSource:
 
     def _snapshot(self, payload: dict) -> Path:
         orders, inventory, cutoff, fingerprint = validate_payload(payload)
-        path = self.snapshots / fingerprint
+        # The tool version is part of the path: a schema upgrade rebuilds instead of failing on old files.
+        path = self.snapshots / f"{fingerprint}_v{research.TOOL_VERSION}"
         if path.exists() and not (self.state / "customer_hmac.key").exists():
             raise research.AnalysisError("本地匿名化密钥缺失，不能验证飞书批次的一致性。")
         key = research.load_key(self.state)
         records = [research.normalized_order(row, key) for row in orders]
+        items, item_report = research.normalized_items(payload["tables"]["03 订单商品明细"]["rows"], orders, records)
         paid = [r for r in records if r[6] and not r[7]]
         if (len(paid) != payload["summary"]["支付观察单数"] or
                 sum(r[9] for r in paid) != research.cents(payload["summary"]["支付观察净额_元"])):
@@ -128,18 +130,20 @@ class FeishuSnapshotSource:
             manifest, connection = research.read_snapshot(path)
             try:
                 previous_records = connection.execute("SELECT * FROM orders").fetchall()
+                previous_items = connection.execute("SELECT * FROM items").fetchall()
             finally:
                 connection.close()
             canonical_rows = lambda rows: sorted(research.encoded(list(row)) for row in rows)
             if (manifest["source_sha256"] != fingerprint or manifest["source_tables"] != inventory or
-                    canonical_rows(previous_records) != canonical_rows(records)):
+                    canonical_rows(previous_records) != canonical_rows(records) or
+                    canonical_rows(previous_items) != canonical_rows(items)):
                 raise research.AnalysisError("同一飞书来源指纹对应不同内容，拒绝用旧快照替代。")
             return path
         research.private_dir(self.snapshots)
         staged = self.snapshots / (".pending_" + uuid.uuid4().hex)
         research.write_analysis_snapshot(records, inventory, cutoff, fingerprint, "Feishu daily export", staged,
             sum(r["匿名顾客编号"] in (None, "") for r in orders),
-            {"kind": "feishu_daily_sync", "hash_kind": "full_source_content_fingerprint"})
+            {"kind": "feishu_daily_sync", "hash_kind": "full_source_content_fingerprint"}, items, item_report)
         os.replace(staged, path)
         return path
 

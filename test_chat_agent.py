@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -146,6 +148,10 @@ class ResearchAgentTest(unittest.TestCase):
         with self.assertRaises(LLMError):
             self.agent(llm).ask("查询")
         self.assertEqual(self.events()[-1]["event"], "error")
+        client = DeepSeekLLM(api_key="TEST_ONLY_KEY", reasoning_effort="high")
+        with patch.object(client._opener, "open", return_value=io.BytesIO(json.dumps(response(message())).encode())):
+            with self.assertRaises(LLMError):
+                self.agent(client).ask("查询订单数")
 
     def test_round_and_tool_limits_stop_execution(self):
         llm = ScriptedLLM(response(call("describe_data", {})), response(call("describe_data", {}, "call_2")))
@@ -180,6 +186,13 @@ class ResearchAgentTest(unittest.TestCase):
 
 
 class ResponsesClientTest(unittest.TestCase):
+    def test_installed_command_configuration_belongs_to_current_workspace(self):
+        source = Path(__file__).resolve().parent
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run([sys.executable, "-c", "import sys,json; sys.path.insert(0,sys.argv[1]); import chat_agent,research_assistant; from socialdog_agent.feishu_source import DEFAULT_SYNC_STATE; print(json.dumps([str(chat_agent.ENV_FILE),str(research_assistant.DEFAULT_STATE),str(DEFAULT_SYNC_STATE)]))", str(source)], cwd=temporary, text=True, capture_output=True, check=True)
+            root = Path(temporary).resolve()
+            self.assertEqual(json.loads(result.stdout), [str(root / '.env'), str(root / 'research_local'), str(root / 'feishu_sync_state.json')])
+
     def test_identity_coverage_explicitly_refers_to_all_source_orders(self):
         result = public_result({"status": "ok", "source_tables": [], "identity_coverage": {
             "missing_customer_id_orders": 968}})
@@ -197,7 +210,7 @@ class ResponsesClientTest(unittest.TestCase):
         request = send.call_args.args[0]
         payload = json.loads(request.data)
         self.assertEqual(request.full_url, "https://api.deepseek.com/responses")
-        self.assertEqual(payload["reasoning"], {"effort": "none"})
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
         self.assertFalse(payload["store"])
         self.assertNotIn("messages", payload)
         self.assertNotIn("TEST_ONLY_KEY", request.data.decode())
@@ -215,6 +228,21 @@ class ResponsesClientTest(unittest.TestCase):
         with patch.object(client._opener, "open", return_value=io.BytesIO(b"not json")):
             with self.assertRaises(LLMError):
                 client.create_response(input=[], instructions="", tools=[])
+
+    def test_deepseek_thinking_uses_auto_without_disabling_reasoning(self):
+        for effort in ("none", "low", "high"):
+            for choice in ("required", "auto", "none"):
+                with self.subTest(effort=effort, choice=choice):
+                    client = DeepSeekLLM(api_key="TEST_ONLY_KEY", reasoning_effort=effort)
+                    body = json.dumps(response(message())).encode()
+                    with patch.object(client._opener, "open", return_value=io.BytesIO(body)) as send:
+                        client.create_response(input=[{"role": "user", "content": "查询数据"}],
+                                               instructions="test", tools=[],
+                                               tool_choice=choice)
+                    payload = json.loads(send.call_args.args[0].data)
+                    expected = "auto" if effort != "none" and choice == "required" else choice
+                    self.assertEqual(payload["tool_choice"], expected)
+                    self.assertEqual(payload["reasoning"], {"effort": effort})
 
     def test_incomplete_and_malformed_outputs_rejected(self):
         bad_responses = [response(message(), status="incomplete"), response({"type": "computer_call"}),

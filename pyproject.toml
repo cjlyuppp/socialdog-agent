@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socialdog-agent"
+version = "0.2.0"
+description = "A source-grounded research workspace for historical store data"
+requires-python = ">=3.10"
+dependencies = [
+  "openpyxl>=3.1,<4",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "pwdlib[argon2]>=0.2,<1",
+  "pydantic>=2.9,<3",
+]
+
+[project.optional-dependencies]
+test = ["httpx>=0.27,<1"]
+
+[project.scripts]
+socialdog-api = "api_server:main"
+socialdog-chat = "chat_agent:main"
+socialdog-web = "web_agent:main"
+socialdog-history = "historical_backtest:main"
+socialdog-eval = "eval_runner:main"
+
+[tool.setuptools]
+py-modules = ["api_server", "chat_agent", "web_agent", "historical_backtest", "research_assistant", "feishu_daily_clean", "eval_runner"]
+
+[tool.setuptools.packages.find]
+include = ["socialdog_agent*"]
+
+[tool.setuptools.package-data]
+socialdog_agent = ["web_static/*"]
+"socialdog_agent.server.migrations" = ["*.sql"]

@@ -47,11 +47,12 @@ function showSource(info, version, historical = false) {
   $("snapshot-version").textContent = version || "—";
   const ready = state.status?.ready;
   const overdue = source.freshness_status === "check_overdue";
+  const offline = source.kind === "historical_backtest";
   const sourceStatus = $("source-status");
   sourceStatus.replaceChildren(node("span", "status-dot"), document.createTextNode(
-    !info ? "数据连接暂不可用" : historical ? "这条回答使用的版本" : overdue ? "来源核验已过期" : "已连接 · 每日同步"));
+    !info ? "数据连接暂不可用" : historical ? "这条回答使用的版本" : offline ? "历史数据模式 · 离线回测包" : overdue ? "来源核验已过期" : "已连接 · 每日同步"));
   sourceStatus.className = `source-status${!info ? " error" : overdue ? " warning" : ""}`;
-  $("source-note").textContent = !info ? "请检查本机配置与飞书每日同步。" : overdue ? "最近核验已超过每日检查窗口，尚未确认来源有无新变化。" : "通过飞书每日核验读取。数据截至日期不等于今天，下一次提问会检查最新同步版本。";
+  $("source-note").textContent = !info ? "请检查本机配置与飞书每日同步。" : offline ? source.notice : overdue ? "最近核验已超过每日检查窗口，尚未确认来源有无新变化。" : "通过飞书每日核验读取。数据截至日期不等于今天，下一次提问会检查最新同步版本。";
   $("welcome-source").textContent = source.source_data_as_of ? `数据截至 ${date(source.source_data_as_of)} · 每天核验，逐题锁定版本` : "数据连接暂不可用，请检查本机同步。";
   $("model-pill").textContent = state.status?.model || "DeepSeek";
   if (!ready && !state.session?.turns.length) notice(state.status?.error || "正在检查配置…");
@@ -231,6 +232,8 @@ function renderConversation() {
     } else if (turn.result) {
       latestResult = turn.result;
       content.append(markdown(turn.result.answer));
+      const ungrounded = turn.result.grounding?.ungrounded_numbers || [];
+      if (ungrounded.length) content.append(node("div", "answer-warning", `以下数字未能在工具结果中找到，请人工核对：${ungrounded.join("、")}`));
       const meta = node("div", "answer-meta");
       const evidence = node("button", "evidence-button", `▧ ${turn.result.evidence.length} 条工具依据`);
       evidence.addEventListener("click", () => revealEvidence(turn.result));

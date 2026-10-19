@@ -36,6 +36,7 @@ class Factor:
     method: str
     cautions: tuple[str, ...]
     group_by: str | None = None
+    tool: str | None = None
 
 
 def order_field(label, *aliases):
@@ -65,14 +66,16 @@ CATALOG = (
            (Requirement("订单商品明细", ("商品明细",), ("历史商品名称", "商品名称")),
             Requirement("商品数量", ("商品明细",), ("数量", "商品数量")),
             Requirement("商品与订单关联", ("商品明细",), ("关联订单", "匿名订单编号"))),
-           "实现商品级受限聚合后，核对数量单位、退款与商品组合；必要时再建立模型。",
-           ("当前只读分析库未加载商品明细，表头存在不代表当前工具能计算商品销量。", "不能用订单笔数替代商品件数；替代关系需要价格及可售状态历史。")),
+           "用query_products做商品级受限聚合，核对数量单位、退款与商品组合；必要时再建立模型。",
+           ("记录件数不扣除退款件数；未关联到订单的明细不计入，见describe_data的item_coverage。",
+            "不能用订单笔数替代商品件数；替代关系需要价格及可售状态历史。"), tool="query_products"),
     Factor("price", "价格与价格调整", DEMAND, "真实执行价格变化是否与订单或商品销量变化有关？",
            (Requirement("商品目录价格", ("商品价格快照",), ("目录售价", "商品售价", "价格")),
             Requirement("真实价格执行记录", ("价格执行事件", "商品价格历史"), ("执行价格", "调整后价格")),
             Requirement("调价生效时间", ("价格执行事件", "商品价格历史"), ("生效时间", "执行时间"))),
            "补齐价格执行事件和商品销量，再由教授确定识别策略与回归设定。",
-           ("当前价格快照不等于历史调价记录；实付差异也可能来自优惠或商品组合。", "不输出价格弹性或调价因果效果。")),
+           ("当前价格快照不等于历史调价记录；实付差异也可能来自优惠或商品组合。", "不输出价格弹性或调价因果效果。",
+            "历史27列交易表可按项目单价重建调价事件，见历史数据模式的history_price_events。")),
     Factor("coupon", "优惠券设计与发放", ALL, "优惠券规则或发放是否对应新增消费与后续复购？",
            (order_field("订单优惠金额", "优惠券减免"),
             Requirement("活动与资格记录", ("券与实验", "优惠券发放"), ("活动ID", "实验ID")),
@@ -144,7 +147,7 @@ def inspect_factors(manifest: dict, connection: sqlite3.Connection, *, target: s
         item = {"id": spec.id, "name": spec.name, "hypothesis": spec.hypothesis,
                 "basis": "项目研究方向形成的候选假设，已对照本快照字段；尚未验证影响",
                 "schema_evidence": evidence, "missing_data": missing,
-                "readiness": "missing_data" if missing else "tool_not_implemented",
+                "readiness": "missing_data" if missing else "tool_available" if spec.tool else "tool_not_implemented",
                 "suggested_method": spec.method, "limitations": list(spec.cautions),
                 "causal_status": "not_estimated", "importance_rank": None}
         if not missing and spec.group_by:
@@ -157,9 +160,11 @@ def inspect_factors(manifest: dict, connection: sqlite3.Connection, *, target: s
             item["can_compare_released_groups"] = len(result["rows"]) >= 2
             if len(result["rows"]) == 1:
                 item["limitations"].append("当前只披露一个分组，只能描述该组，不能比较不同组的差异。")
+        if not missing and spec.tool:
+            item["use_tool"] = spec.tool
         factors.append(item)
     counts = {status: sum(f["readiness"] == status for f in factors) for status in
-              ["descriptive_ready", "no_publishable_groups", "missing_data", "tool_not_implemented"]}
+              ["descriptive_ready", "tool_available", "no_publishable_groups", "missing_data", "tool_not_implemented"]}
     return {"status": "ok", "factor_tool_version": FACTOR_VERSION, "target": target,
             "target_definition": TARGETS[target], "factor_count": len(factors), "factors": factors,
             "readiness_counts": counts, "analysis_status": "candidate_audit_not_effect_estimation",
@@ -178,7 +183,8 @@ def inspect_factors(manifest: dict, connection: sqlite3.Connection, *, target: s
                              "用户提供的业务背景仍需通过业务记录核实。"]}
 
 
-STATUS_LABELS = {"descriptive_ready": "可查询受限描述性统计", "no_publishable_groups": "当前无可发布分组",
+STATUS_LABELS = {"descriptive_ready": "可查询受限描述性统计", "tool_available": "可用专门工具查询",
+                 "no_publishable_groups": "当前无可发布分组",
                  "missing_data": "缺少关键数据", "tool_not_implemented": "有相关字段，工具待实现"}
 
 

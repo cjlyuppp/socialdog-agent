@@ -36,8 +36,8 @@ class FactorInspectionTest(unittest.TestCase):
     def test_current_fields_give_four_descriptive_checks_and_no_effect_ranking(self):
         result = self.inspect()
         self.assertEqual(result["factor_count"], 13)
-        self.assertEqual(result["readiness_counts"], {"descriptive_ready": 4, "missing_data": 8,
-                                                    "no_publishable_groups": 0, "tool_not_implemented": 1})
+        self.assertEqual(result["readiness_counts"], {"descriptive_ready": 4, "missing_data": 8, "tool_available": 1,
+                                                    "no_publishable_groups": 0, "tool_not_implemented": 0})
         self.assertEqual(result["statistical_tests_performed"], 0)
         self.assertFalse(result["trend_assessed"])
         self.assertEqual(result["data_overview"]["observation_calendar_days"], 29)
@@ -51,7 +51,8 @@ class FactorInspectionTest(unittest.TestCase):
         self.assertIn("充值本金", factors["stored_value"]["missing_data"])
         self.assertIn("实际出杯或完成时间", factors["waiting"]["missing_data"])
         self.assertEqual(factors["weather"]["readiness"], "missing_data")
-        self.assertEqual(factors["product_mix"]["readiness"], "tool_not_implemented")
+        self.assertEqual(factors["product_mix"]["readiness"], "tool_available")
+        self.assertEqual(factors["product_mix"]["use_tool"], "query_products")
 
     def test_suppressed_group_does_not_leak_through_factor_evidence(self):
         result = self.inspect()

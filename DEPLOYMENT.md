@@ -2,6 +2,8 @@
 
 本仓库提供程序，不包含API Key、营业数据、数据库、聊天记录、飞书文档地址或本机同步状态。请从项目负责人处另行取得授权数据，不要把这些文件提交到GitHub。
 
+以下步骤针对保留的 `web_agent.py` 单工作区原型。多人账号、任务队列、数据核对及测评服务请使用 [多人工作台部署说明](docs/多人工作台部署.md)。
+
 ## 1. 安装程序
 
 在Linux服务器上执行，Python需3.10以上：
@@ -29,7 +31,7 @@ python chat_agent.py --setup
 chmod 600 .env
 ```
 
-环境变量优先于`.env`。`.env`只支持`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`、`DEEPSEEK_TIMEOUT`，不要直接在其中写Shell命令。
+环境变量优先于`.env`。`.env`只支持`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`、`DEEPSEEK_TIMEOUT`、`DEEPSEEK_REASONING_EFFORT`，不要直接在其中写Shell命令。
 
 ## 3. 单独导入数据
 
