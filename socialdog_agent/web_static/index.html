@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SocialDog 本地经济研究助理">
+  <title>SocialDog · 研究工作台</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="workspace">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/" aria-label="SocialDog 首页"><span class="brand-mark">S<span>·</span></span><span>SocialDog<small>RESEARCH WORKSPACE</small></span></a>
+      <button class="icon-button sidebar-close" id="sidebar-close" aria-label="关闭研究记录">×</button>
+      <button class="new-chat" id="new-chat"><span>＋</span> 新建研究 <kbd>↗</kbd></button>
+      <div class="nav-label">研究记录 <span id="session-count">0</span></div>
+      <nav class="session-list" id="session-list" aria-label="研究会话"></nav>
+      <div class="sidebar-bottom"><span class="local-dot"></span><div>本地工作空间<small>会话保存在这台电脑</small></div><span class="local-icon">⌂</span></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="menu-toggle" aria-label="展开研究记录">☰</button>
+        <div class="breadcrumb">工作空间 <span>/</span> <strong id="conversation-title">新的研究</strong></div>
+        <div class="header-actions"><span class="model-pill" id="model-pill">DeepSeek</span><button class="icon-button" id="evidence-toggle" aria-label="显示数据与依据" title="数据与依据">◫</button></div>
+      </header>
+
+      <div class="conversation-scroll" id="conversation-scroll">
+        <section class="welcome" id="welcome">
+          <div class="eyebrow"><span></span> SOCIALDOG 经济研究助理</div>
+          <h1>从一个问题，<br>开始理解你的经营。</h1>
+          <p class="welcome-description">连接每天核验的飞书数据，查数、探索研究方向，<br class="wide-break">让每个回答都有可以复核的依据。</p>
+          <div class="suggestion-grid">
+            <button class="suggestion" data-question="我们现在有哪些数据，覆盖什么时间？"><span class="suggestion-icon">▤</span><strong>先看看数据家底</strong><small>数据范围、来源与可用字段</small><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion" data-question="整个观察期有多少支付订单，系统支付净额是多少？"><span class="suggestion-icon">↗</span><strong>查看经营概况</strong><small>支付订单与系统支付净额</small><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion" data-question="哪些factor可以研究销量和留存？依据是什么，还缺什么数据？"><span class="suggestion-icon">⌘</span><strong>寻找研究切入点</strong><small>候选因素、字段依据与数据缺口</small><span class="suggestion-arrow">↗</span></button>
+          </div>
+          <div class="welcome-source" id="welcome-source">正在核验本地数据连接…</div>
+        </section>
+        <section class="messages" id="messages" aria-label="研究对话" aria-live="polite"></section>
+      </div>
+
+      <div class="composer-area">
+        <div class="notice" id="notice" role="status" hidden></div>
+        <form class="composer" id="chat-form">
+          <label class="sr-only" for="question">输入研究问题</label>
+          <textarea id="question" placeholder="问一个经营或研究问题，也可以继续追问…" rows="2" maxlength="4000"></textarea>
+          <div class="composer-footer"><span><span class="composer-dot"></span> 飞书每日同步 <span class="composer-separator">·</span> 支持连续追问</span><button id="send" type="submit" aria-label="发送问题" disabled>↑</button></div>
+        </form>
+        <div class="composer-hint"><span>Enter 发送 <span>·</span> Shift + Enter 换行</span><span>结论以工具证据为准</span></div>
+      </div>
+    </main>
+
+    <aside class="evidence-panel" id="evidence-panel">
+      <div class="panel-header"><h2>数据与依据</h2><button class="icon-button" id="refresh-source" aria-label="重新核验本地同步版本" title="重新核验本地同步版本">↻</button></div>
+      <section class="source-card">
+        <div class="section-label">当前数据来源 <span class="source-badge">飞书</span></div>
+        <h3>经营研究数据</h3>
+        <p>每天核验的本地分析版本</p>
+        <div class="source-status" id="source-status"><span class="status-dot"></span> 正在检查连接</div>
+        <div class="source-date"><span>业务数据截至</span><strong id="data-cutoff">—</strong></div>
+        <dl class="source-details"><dt>来源核验</dt><dd id="source-checked">—</dd><dt>分析版本</dt><dd id="snapshot-version">—</dd></dl>
+        <p class="source-note" id="source-note">核验时间与业务数据时间分别显示。</p>
+      </section>
+      <section class="evidence-section"><div class="section-heading"><h3>回答依据</h3><span id="evidence-count">0</span></div><div id="evidence-content"><div class="evidence-empty"><span>▧</span><p>提问后，查看实际调用的工具、<br>查询条件和返回结果。</p></div></div></section>
+      <div class="boundary-note"><span>◎</span><p>分析使用通过人数门槛的聚合结果。少于20位可确认会员的分组不披露。</p></div>
+    </aside>
+  </div>
+</body>
+</html>

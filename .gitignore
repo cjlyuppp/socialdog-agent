@@ -1,11 +1,45 @@
-# Local credentials and business data
-.env
-.env.*
-!.env.example
+# Local research data, pseudonymization secrets, and audit logs.
 research_local/
 outputs/
 data/
 node_modules/
+sources/
+feishu_sync_state.json
+source_inspection.json
+source_overview.txt
+.DS_Store
+.idea/
+.vscode/
+# Local data-preparation programs and handover notes are separate from the agent.
+/Agent使用说明.md
+/研究助理启动说明.md
+/网页研究助理使用说明.md
+/运行说明.md
+/飞书每日同步运行手册.md
+/clean_socialdog.py
+/build_workbook.mjs
+/reclean_to_teacher.py
+/reclean_to_teacher.mjs
+/inspect_source.py
+/test_cleaner.py
 *.xlsx
+*.xls
 *.base
 *.sqlite
+*.sqlite-*
+*.db
+*.csv
+*.tsv
+*.ndjson
+*.jsonl
+*.key
+*.pem
+*.zip
+*.log
+__pycache__/
+*.pyc
+# Local model credentials; the example contains no secret.
+.env
+.env.*
+!.env.example
+.venv/
